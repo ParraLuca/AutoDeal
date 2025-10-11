@@ -189,6 +189,50 @@
       const n = Number(s);
       return Number.isFinite(n) ? n : null;
     }
+  // ===== Description avec "voir plus" (120 caractères) =====
+  function buildDescription(raw, id, limit = 120){
+    // Nettoyage simple: enlève URLs et espaces multiples (même logique que cleanDesc sans tronquer)
+    const s = (raw ?? "").toString().trim()
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/\s+/g, " ");
+
+    if (!s) return "";                       // rien à afficher
+    if (s.length <= limit) {                 // court: pas de bouton
+      return `<p class="text-sm text-slate-700 mt-1">${s}</p>`;
+    }
+
+    // coupe à la limite, en respectant les mots (pas au milieu)
+    let short = s.slice(0, limit);
+    short = short.replace(/\s+\S*$/, "");    // retire le dernier mot incomplet
+
+    return `
+      <p class="text-sm text-slate-700 mt-1">
+        <span id="${id}-short">${short}…</span>
+        <span id="${id}-full" class="hidden">${s}</span>
+        <button class="text-slate-900 font-semibold underline ml-1"
+                type="button"
+                onclick="toggleDesc('${id}', this)">Voir plus</button>
+      </p>
+    `;
+  }
+
+  window.toggleDesc = (id, el) => {
+    const shortEl = document.getElementById(id + '-short');
+    const fullEl  = document.getElementById(id + '-full');
+    const expanded = !fullEl.classList.contains('hidden');
+
+    if (expanded) {
+      // Replier
+      fullEl.classList.add('hidden');
+      shortEl.classList.remove('hidden');
+      el.textContent = 'Voir plus';
+    } else {
+      // Dérouler
+      fullEl.classList.remove('hidden');
+      shortEl.classList.add('hidden');
+      el.textContent = 'Voir moins';
+    }
+  };
 
     // ================== Images (ultra robuste) ==================
     function mapViaProxy(u){
@@ -625,7 +669,7 @@
     function card(row, idxAbs){
       const title = [row.make?.toString().trim(), row.model?.toString().trim(), Number.isFinite(+row.year)? String(+row.year) : ""]
         .filter(Boolean).join(" ") || "Annonce";
-      const desc = cleanDesc(row.description || "", 420);
+      const dhtml = buildDescription(row.description || "", 'desc_' + idxAbs, 240);
       const lo=row.pred_price_lo, hi=row.pred_price_hi, fair=row.pred_price_fair, price=row.price_eur;
       let expl="";
       if (Number.isFinite(+price) && Number.isFinite(+fair)){
@@ -649,7 +693,7 @@
           <div class="flex items-start justify-between gap-2 mb-4">
             <div>
               <h3 class="text-xl font-extrabold tracking-tight">${title}</h3>
-              ${desc ? `<p class="text-sm text-slate-700 mt-1">${desc}</p>` : ``}
+              ${dhtml}
             </div>
             ${badge(row.decision_label, row.decision_class)}
           </div>
