@@ -328,12 +328,29 @@
     }
 
     // ================== Constantes domain ==================
+    // Seuils "suspect"
+    const SUSPECT_DISCOUNT_PCT = 0.50;   // ≥ 50% de remise => suspect
+    const SUSPECT_PROBA        = 0.55;   // cond_bad_proba ≥ 0.55 => suspect
+
     const NEGATIVE_FLAGS = {
-      has_export:"Export",has_ct_fail:"CT refusé",has_accident:"Accident",has_damage:"Dégâts",
-      has_engine_issue:"Moteur",has_gearbox_issue:"Boîte",has_non_rolling:"Non roulant",
-      has_rust:"Rouille",has_oil_consumption:"Conso huile",has_noise_smoke:"Bruit/Fumée",
+      has_export:"Export",
+      has_ct_fail:"CT refusé",
+      has_accident:"Accident",
+      has_damage:"Dégâts",
+      has_engine_issue:"Moteur",
+      has_gearbox_issue:"Boîte",
+      has_non_rolling:"Non roulant",
+      has_rust:"Rouille",
+      has_oil_consumption:"Conso huile",
+      has_noise_smoke:"Bruit/Fumée",
       has_km_not_guaranteed:"KM non garantis",
+      // Nouveaux si présents dans le CSV
+      has_for_parts:"Pour pièces",
+      has_insurance_issue:"Assurance",
+      has_airbag_deployed:"Airbag",
+      has_seatbelt_blocked:"Ceinture"
     };
+
     const POSITIVE_FLAGS = {
       has_ct_ok:"CT ok",has_carpass:"Carpass",has_maintenance_history:"Entretien suivi",
       has_first_owner:"1er propriétaire",has_non_smoker:"Non-fumeur",has_warranty:"Garantie",
@@ -500,7 +517,24 @@
     };
 
     // ================== Décision deal (FR) ==================
-    function decide(dp){
+    function decideRow(row){
+      const dp = row.discount_pct; // proportion: 0.70 => 70%
+      const hasHugeDiscount = (dp!=null && Number.isFinite(+dp) && (+dp)>=SUSPECT_DISCOUNT_PCT);
+
+      const mlSuspect =
+        (+row.is_unroadworthy_pred === 1) ||
+        (Number.isFinite(+row.cond_bad_proba) && (+row.cond_bad_proba) >= SUSPECT_PROBA) ||
+        (String(row.deal_label||"").toLowerCase() === "suspicious");
+
+      const textCritical =
+        (+row.has_non_rolling===1) || (+row.has_ct_fail===1) || (+row.has_for_parts===1) ||
+        ( (+row.has_accident===1) && ( (+row.has_engine_issue===1) || (+row.has_gearbox_issue===1) || (+row.has_airbag_deployed===1) ) );
+
+      if (mlSuspect || textCritical || hasHugeDiscount) {
+        return ["Suspect", "red"]; // badge rouge
+      }
+
+      // Sinon, on revient à l’échelle habituelle sur la remise
       if (dp==null || !Number.isFinite(+dp)) return ["À considérer","gray"];
       const pct = +dp*100;
       if (pct>=25) return ["Super affaire","green"];
@@ -508,6 +542,7 @@
       if (pct<-5)  return ["Surévaluée","red"];
       return ["Prix correct","gray"];
     }
+
 
     // ================== État global ==================
     let SOURCES=[]; let RAW=[]; let DATA=[]; let VIEW=[]; let PAGE=1;
@@ -605,6 +640,20 @@
         const num=["year","mileage_km","power_kw","power_hp","co2_gkm","doors","seller_rating",
           "engine_liters","price_eur","pred_price_fair","pred_price_lo","pred_price_hi"];
         num.forEach(c=>{ row[c]=toNumberLoose(row[c]); });
+        // Colonnes ML/qualité si dispo (sinon valeurs par défaut)
+        row.is_unroadworthy_pred = toNumberLoose(row.is_unroadworthy_pred) ?? 0;
+        row.cond_bad_proba       = toNumberLoose(row.cond_bad_proba);
+        // compat: si le back a déjà mis 'suspicious' dans deal_label
+        row.deal_label = row.deal_label || "";
+
+        // Assure la présence (0/1) de TOUS les flags négatifs affichables
+        for (const f of Object.keys(NEGATIVE_FLAGS)) {
+          row[f] = toNumberLoose(row[f]) ?? 0;
+        }
+        // Et des positifs
+        for (const f of Object.keys(POSITIVE_FLAGS)) {
+          row[f] = toNumberLoose(row[f]) ?? 0;
+        }
 
         for (const f of [...Object.keys(NEGATIVE_FLAGS), ...Object.keys(POSITIVE_FLAGS)]) {
           row[f] = toNumberLoose(row[f]) ?? 0;
@@ -615,9 +664,9 @@
         row.discount_eur=disc;
         row.discount_pct=(disc!=null && fair) ? (disc/fair) : null;
 
-        const [lbl,cls]=decide(row.discount_pct);
-        row.decision_label=row.decision_label||lbl;
-        row.decision_class=row.decision_class||cls;
+        const [lbl, cls] = decideRow(row);
+        row.decision_label = lbl;
+        row.decision_class = cls;
 
         row.options_list=toList(row.options);
         row._images=getImages(row);
