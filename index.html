@@ -59,17 +59,44 @@
       color: #0f172a; /* slate-900 */
     }
 
-    /* 3) Et du blanc bien visible dans le header sombre */
-    .hero-grad, .hero-grad * {
-      color: #ffffff;
-    }
-
     /* 4) Certains navigateurs/ thèmes appliquent -webkit-text-fill-color:transparent
           → on normalise pour éviter le “texte invisible” */
     * { -webkit-text-fill-color: currentColor; }
 
     /* 5) Optionnel : rendre la sélection visible (utile pour debug) */
     ::selection { background: #fde68a; color: #0f172a; } /* amber-200 */
+    /* On garde le header lisible en “dark” */
+    .hero-grad { color:#ffffff; }
+
+    /* IMPORTANT : tous les éléments à fond clair dans le header doivent avoir du texte foncé */
+    .hero-grad .card,
+    .hero-grad .pill,
+    .hero-grad .kcell,
+    .hero-grad input,
+    .hero-grad select,
+    .hero-grad button,
+    .hero-grad label,
+    .hero-grad .badge,
+    .hero-grad [class*="bg-white"],
+    .hero-grad [class*="bg-slate-50"],
+    .hero-grad [class*="bg-slate-100"] {
+      color: #0f172a !important;            /* texte noir (slate-900) */
+      -webkit-text-fill-color: #0f172a;     /* corrige WebKit/Chrome “texte invisible” */
+    }
+
+    /* Placeholders lisibles sur fond blanc */
+    .hero-grad input::placeholder,
+    .hero-grad textarea::placeholder {
+      color: #475569;                        /* slate-600 */
+      opacity: 1;
+    }
+
+    /* Désactive les inversions auto “dark mode” des navigateurs/extensions */
+    :root { color-scheme: light; }
+
+    /* Sélection visible (debug pratique) */
+    ::selection { background:#fde68a; color:#0f172a; }
+
 
   </style>
 </head>
