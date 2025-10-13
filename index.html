@@ -51,6 +51,26 @@
       background:rgba(2,6,23,0.5);z-index:50;padding:1rem;
     }
     .modal.open{display:flex}
+    /* 1) Empêche l'auto dark-mode des contrôles et textes */
+    :root { color-scheme: light; }
+
+    /* 2) Sécurité : forcer des couleurs lisibles dans les zones claires */
+    body, main, .card, .pill, input, select, button, label, .kcell, .pairs, .grid-3x3 {
+      color: #0f172a; /* slate-900 */
+    }
+
+    /* 3) Et du blanc bien visible dans le header sombre */
+    .hero-grad, .hero-grad * {
+      color: #ffffff;
+    }
+
+    /* 4) Certains navigateurs/ thèmes appliquent -webkit-text-fill-color:transparent
+          → on normalise pour éviter le “texte invisible” */
+    * { -webkit-text-fill-color: currentColor; }
+
+    /* 5) Optionnel : rendre la sélection visible (utile pour debug) */
+    ::selection { background: #fde68a; color: #0f172a; } /* amber-200 */
+
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
