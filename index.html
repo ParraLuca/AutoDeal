@@ -14,6 +14,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- PapaParse pour CSV -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     :root{ --ok:#16a34a; --warn:#d97706; --over:#dc2626; --fair:#334155; }
@@ -40,20 +42,36 @@
     @media (max-width: 640px){ .pairs{grid-template-columns:1fr;} .grid-3x3{grid-template-columns:1fr;} }
     details summary::-webkit-details-marker{display:none}
     details summary{cursor:pointer}
+
+    /* Header compte (avatar) */
+    .avatar{width:28px;height:28px;border-radius:9999px;object-fit:cover;border:1px solid #e5e7eb;background:#fff}
+    /* Mini modal login */
+    .modal{
+      position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(2,6,23,0.5);z-index:50;padding:1rem;
+    }
+    .modal.open{display:flex}
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
 
   <!-- HERO / Marque -->
   <header class="hero-grad text-white border-b border-slate-800/50">
-    <div class="max-w-4xl mx-auto px-5 py-10">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-          <span class="text-xl font-extrabold">A</span>
+    <div class="max-w-4xl mx-auto px-5 py-5">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
+            <span class="text-xl font-extrabold">A</span>
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">AutoDeal</h1>
+            <p class="text-sm sm:text-base text-slate-300">Compare • Évalue • Décide — meilleurs deals 2ememain, lisibles en un coup d’œil.</p>
+          </div>
         </div>
-        <div>
-          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">AutoDeal</h1>
-          <p class="text-sm sm:text-base text-slate-300">Compare • Évalue • Décide — meilleurs deals 2ememain, lisibles en un coup d’œil.</p>
+
+        <!-- Zone compte -->
+        <div id="accountArea" class="flex items-center gap-3">
+          <!-- rempli par JS: bouton Se connecter OU nom + avatar + déconnexion -->
         </div>
       </div>
 
@@ -130,12 +148,137 @@
     </div>
   </footer>
 
-  <script>
-    // ================== Switch debug (met à true pour afficher les URLs images trouvées sur chaque carte) ==================
-    const IMG_DEBUG = false;          // <- passe à true pour inspecter
-    const IMG_PROXY_BASE = "";        // ex: "/img?u=" si tu mets un petit proxy côté backend (facultatif)
+  <!-- Modal de connexion -->
+  <div id="loginModal" class="modal">
+    <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5">
+      <h3 class="text-lg font-extrabold mb-2">Se connecter</h3>
+      <p class="text-sm text-slate-600 mb-4">Connecte-toi avec Google pour ouvrir les annonces.</p>
+      <div id="gsiBtn" class="mb-3"></div>
+      <div class="flex justify-end gap-2">
+        <button class="pill" onclick="closeLogin()">Annuler</button>
+      </div>
+    </div>
+  </div>
 
-    // ================== Constantes ==================
+  <script>
+    // ================== Switch debug images ==================
+    const IMG_DEBUG = false;
+    const IMG_PROXY_BASE = "";
+
+    // ================== Auth (Google Identity Services) ==================
+    const GOOGLE_CLIENT_ID = "3634045973-c03q0uhs0e5utuq69k1e32a79nopad49.apps.googleusercontent.com";
+    let pendingRedirectUrl = null;
+
+    function parseJwt(token){
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(jsonPayload);
+      } catch { return null; }
+    }
+
+    function saveUserFromCredential(credential){
+      const claims = parseJwt(credential);
+      if (!claims) return null;
+      const user = {
+        name: claims.name || "",
+        email: claims.email || "",
+        picture: claims.picture || "",
+        sub: claims.sub || "",
+        // id_token non stocké longtemps en vrai prod; ici démo front-only
+        id_token: credential,
+        signed_at: Date.now()
+      };
+      localStorage.setItem("autodeal_user", JSON.stringify(user));
+      return user;
+    }
+
+    function getUser(){
+      try { return JSON.parse(localStorage.getItem("autodeal_user") || "null"); } catch { return null; }
+    }
+    function isSignedIn(){ return !!getUser(); }
+    function signOut(){
+      localStorage.removeItem("autodeal_user");
+      pendingRedirectUrl = null;
+      renderAccount();
+    }
+
+    function openLogin(){ document.getElementById("loginModal").classList.add("open"); }
+    function closeLogin(){ document.getElementById("loginModal").classList.remove("open"); }
+
+    // Init GIS + bouton
+    window.onloadGisReady = function(){
+      if (!window.google || !google.accounts || !google.accounts.id) return;
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (response)=>{
+          const user = saveUserFromCredential(response.credential);
+          renderAccount();
+          closeLogin();
+          // Rediriger si on venait d'un clic "Voir l’annonce"
+          if (pendingRedirectUrl){
+            const url = pendingRedirectUrl; pendingRedirectUrl = null;
+            window.open(url, "_blank", "noopener");
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+
+      // Rend le bouton dans la modale
+      const btn = document.getElementById("gsiBtn");
+      if (btn) {
+        google.accounts.id.renderButton(btn, {
+          theme: "outline",
+          size: "large",
+          shape: "pill",
+          text: "continue_with",
+          logo_alignment: "left"
+        });
+      }
+      // One Tap (optionnel)
+      // google.accounts.id.prompt(); // tu peux activer si tu veux One Tap
+    };
+
+    // Le script GIS charge async → poll léger si onload n'est pas dispo
+    const gisInterval = setInterval(()=>{
+      if (window.google && google.accounts && google.accounts.id){
+        clearInterval(gisInterval);
+        window.onloadGisReady();
+      }
+    }, 100);
+
+    function renderAccount(){
+      const area = document.getElementById("accountArea");
+      const u = getUser();
+      if (!u){
+        area.innerHTML = `
+          <button class="pill bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  onclick="openLogin()">Se connecter</button>
+        `;
+      } else {
+        area.innerHTML = `
+          <div class="flex items-center gap-2">
+            <img class="avatar" src="${u.picture||''}" alt="avatar" onerror="this.style.display='none'"/>
+            <span class="text-sm font-semibold">${u.name || u.email}</span>
+            <button class="pill bg-white/10 border-white/20 text-white hover:bg-white/20" onclick="signOut()">Se déconnecter</button>
+          </div>
+        `;
+      }
+    }
+
+    // Empêche d'ouvrir une annonce si non connecté
+    function goToAd(url){
+      if (isSignedIn()){
+        window.open(url, "_blank", "noopener");
+      } else {
+        pendingRedirectUrl = url;
+        openLogin();
+      }
+    }
+
+    // ================== Constantes domain ==================
     const NEGATIVE_FLAGS = {
       has_export:"Export",has_ct_fail:"CT refusé",has_accident:"Accident",has_damage:"Dégâts",
       has_engine_issue:"Moteur",has_gearbox_issue:"Boîte",has_non_rolling:"Non roulant",
@@ -176,88 +319,58 @@
       return `${u}${sep}v=${Date.now()}`;
     }
 
-    // Normalise en-têtes CSV → minuscules/sans accents/underscores
     function normalizeHeader(h){
       return String(h||"").trim().toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
         .replace(/\s+/g,"_");
     }
-    // Coercition numérique tolérante
     function toNumberLoose(v){
       if (v==null || v==="") return null;
       const s = String(v).replace(/\s/g,"").replace(/\u00A0/g,"").replace(",",".");
       const n = Number(s);
       return Number.isFinite(n) ? n : null;
     }
-  // ===== Description avec "voir plus" (120 caractères) =====
-  function buildDescription(raw, id, limit = 120){
-    // Nettoyage simple: enlève URLs et espaces multiples (même logique que cleanDesc sans tronquer)
-    const s = (raw ?? "").toString().trim()
-      .replace(/https?:\/\/\S+/g, "")
-      .replace(/\s+/g, " ");
 
-    if (!s) return "";                       // rien à afficher
-    if (s.length <= limit) {                 // court: pas de bouton
-      return `<p class="text-sm text-slate-700 mt-1">${s}</p>`;
+    // ===== Description "voir plus" (120) =====
+    function buildDescription(raw, id, limit = 120){
+      const s = (raw ?? "").toString().trim()
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/\s+/g, " ");
+      if (!s) return "";
+      if (s.length <= limit) return `<p class="text-sm text-slate-700 mt-1">${s}</p>`;
+      let short = s.slice(0, limit).replace(/\s+\S*$/, "");
+      return `
+        <p class="text-sm text-slate-700 mt-1">
+          <span id="${id}-short">${short}…</span>
+          <span id="${id}-full" class="hidden">${s}</span>
+          <button class="text-slate-900 font-semibold underline ml-1" type="button"
+                  onclick="toggleDesc('${id}', this)">Voir plus</button>
+        </p>`;
     }
-
-    // coupe à la limite, en respectant les mots (pas au milieu)
-    let short = s.slice(0, limit);
-    short = short.replace(/\s+\S*$/, "");    // retire le dernier mot incomplet
-
-    return `
-      <p class="text-sm text-slate-700 mt-1">
-        <span id="${id}-short">${short}…</span>
-        <span id="${id}-full" class="hidden">${s}</span>
-        <button class="text-slate-900 font-semibold underline ml-1"
-                type="button"
-                onclick="toggleDesc('${id}', this)">Voir plus</button>
-      </p>
-    `;
-  }
-
-  window.toggleDesc = (id, el) => {
-    const shortEl = document.getElementById(id + '-short');
-    const fullEl  = document.getElementById(id + '-full');
-    const expanded = !fullEl.classList.contains('hidden');
-
-    if (expanded) {
-      // Replier
-      fullEl.classList.add('hidden');
-      shortEl.classList.remove('hidden');
-      el.textContent = 'Voir plus';
-    } else {
-      // Dérouler
-      fullEl.classList.remove('hidden');
-      shortEl.classList.add('hidden');
-      el.textContent = 'Voir moins';
-    }
-  };
+    window.toggleDesc = (id, el) => {
+      const shortEl = document.getElementById(id + '-short');
+      const fullEl  = document.getElementById(id + '-full');
+      const expanded = !fullEl.classList.contains('hidden');
+      if (expanded) { fullEl.classList.add('hidden'); shortEl.classList.remove('hidden'); el.textContent = 'Voir plus'; }
+      else { fullEl.classList.remove('hidden'); shortEl.classList.add('hidden'); el.textContent = 'Voir moins'; }
+    };
 
     // ================== Images (ultra robuste) ==================
     function mapViaProxy(u){
       if (!IMG_PROXY_BASE) return u;
-      try {
-        const enc = encodeURIComponent(u);
-        return IMG_PROXY_BASE + enc;
-      } catch { return u; }
+      try { return IMG_PROXY_BASE + encodeURIComponent(u); } catch { return u; }
     }
-
     function getImages(obj){
       const out = new Set();
       const isStr = v => typeof v === "string" && v.trim().length > 0;
-
       const toHttps = u => u?.startsWith("//") ? ("https:" + u) : u;
-
       const cleanUrl = (u) => {
         if (!isStr(u)) return null;
         let s = stripQuotes(unescapeSlashes(decodeEntities(u.trim())));
         s = toHttps(s);
-        // supprime triple slash
         s = s.replace(/^https?:\/\/\/+/, m => m.replace(/\/+$/, "//"));
         return s;
       };
-
       const validImageLike = (u) => {
         if (!isStr(u)) return false;
         if (/^data:image\//i.test(u)) return true;
@@ -265,7 +378,6 @@
         return /\.(webp|jpg|jpeg|png|gif)(\?|#|$)/i.test(u)
                || /\/image(s)?\//i.test(u) || /cdn|media|photos?|thumbnails?/i.test(u);
       };
-
       const tryJSON = (s) => {
         if (!isStr(s)) return [];
         const t0 = s.trim();
@@ -276,82 +388,54 @@
         }
         return [];
       };
-
       const extractUrls = (s) => {
         if (!isStr(s)) return [];
         const urls = [];
-        // liens “nus”
         const re = /(https?:\/\/[^\s"'<>()]+|\B\/\/[^\s"'<>()]+)/g;
         let m; while ((m = re.exec(s)) !== null) urls.push(m[0]);
-        // srcset: "url 1x, url2 2x"
         s.split(",").forEach(tok=>{
           const p = tok.trim().split(/\s+/)[0];
           if (/^https?:\/\//.test(p) || p.startsWith("//")) urls.push(p);
         });
         return urls;
       };
-
       const pushAny = (v) => {
         if (!v) return;
         if (Array.isArray(v)) { v.forEach(it => pushAny(it)); return; }
         if (typeof v === "object") { Object.values(v).forEach(pushAny); return; }
         if (!isStr(v)) return;
-
-        // JSON sérialisé ?
-        const parsed = tryJSON(v);
-        if (parsed && parsed.length) { pushAny(parsed); return; }
-
-        // Unique URL ?
+        const parsed = tryJSON(v); if (parsed && parsed.length) { pushAny(parsed); return; }
         const cleaned = cleanUrl(v);
         if (validImageLike(cleaned)) { out.add(cleaned); return; }
-
-        // Listes textuelles
         const candidates = (v.includes("|") || v.includes(";") || v.includes(",")) ? v.split(/[|;,]/) : [v];
         candidates.forEach(c => extractUrls(c).forEach(u => {
-          const cu = cleanUrl(u);
-          if (validImageLike(cu)) out.add(cu);
+          const cu = cleanUrl(u); if (validImageLike(cu)) out.add(cu);
         }));
       };
-
-      // 1) champs usuels + numérotés image0..image20
       const candidates = [
         obj.images,obj.image_urls,obj.photo_urls,obj.photos,obj.pictures,obj.pics,obj.thumbnails,
         obj.media,obj.gallery,obj.srcset,obj.src_set,obj.src,obj.cover,obj.cover_url,obj.first_image_url,
         obj.image,obj.img,obj.img_url,obj.img_urls
       ];
-      for (let i=0;i<25;i++){
-        candidates.push(obj["image"+i], obj["img"+i], obj["photo"+i], obj["thumb"+i]);
-      }
+      for (let i=0;i<25;i++){ candidates.push(obj["image"+i], obj["img"+i], obj["photo"+i], obj["thumb"+i]); }
       candidates.forEach(v => pushAny(v));
-
-      // 2) toutes les clés “image-like”
       for (const [k, v] of Object.entries(obj)) {
-        if (!v) continue;
-        const key = k.toLowerCase();
+        if (!v) continue; const key = k.toLowerCase();
         if (/(img|image|photo|pic|thumb|url|media|srcset|src)/.test(key)) pushAny(v);
       }
-
-      // 3) balayage global si rien
       if (!out.size) {
         for (const v of Object.values(obj)) if (isStr(v)) {
           extractUrls(v).forEach(u => { const cu=cleanUrl(u); if (validImageLike(cu)) out.add(cu); });
         }
       }
-
-      // Validation & dédup
-      const final = [];
-      for (const u of out) { try { new URL(toHttps(u)); final.push(u); } catch{} }
+      const final = []; for (const u of out) { try { new URL(toHttps(u)); final.push(u); } catch{} }
       const dedup = Array.from(new Set(final.map(u => u.replace(/#.*$/, ""))));
-
-      // Proxy optionnel
       return dedup.map(mapViaProxy);
     }
 
-    // Fallback d’image progressif
     window.__imgFallback = function(el){
       if (!el || !el.src) return;
       const tried = el.getAttribute("data-tries")|0;
-
       if (tried === 0) {
         el.setAttribute("data-tries","1");
         const noQuery = el.src.replace(/\?.*$/, "");
@@ -362,14 +446,8 @@
         if (el.src.startsWith("//")) { el.src = "https:" + el.src; return; }
         if (el.src.startsWith("http://")) { el.src = el.src.replace(/^http:\/\//,"https://"); return; }
       }
-
-      if (el.classList.contains("thumb")) {
-        el.style.display = "none";
-      } else {
-        const wrapper = el.closest(".img-skeleton");
-        if (wrapper) wrapper.classList.add("img-skeleton");
-        el.alt = "Image indisponible";
-      }
+      if (el.classList.contains("thumb")) { el.style.display = "none"; }
+      else { const wrapper = el.closest(".img-skeleton"); if (wrapper) wrapper.classList.add("img-skeleton"); el.alt = "Image indisponible"; }
     };
 
     // ================== Décision deal (FR) ==================
@@ -383,12 +461,7 @@
     }
 
     // ================== État global ==================
-    let SOURCES=[]; // {label, path}
-    let RAW=[];     // lignes CSV
-    let DATA=[];    // lignes enrichies
-    let VIEW=[];    // filtrées/triées
-    let PAGE=1;
-
+    let SOURCES=[]; let RAW=[]; let DATA=[]; let VIEW=[]; let PAGE=1;
     const sourceSelect=$("sourceSelect");
     const sortSelect=$("sortSelect");
     const orderSelect=$("orderSelect");
@@ -426,7 +499,7 @@
       }
     }
 
-    // ================== Lecture CSV robuste ==================
+    // ================== Lecture CSV ==================
     function parseWithDelimiter(path, delimiter){
       return new Promise((resolve,reject)=>{
         Papa.parse(path, {
@@ -447,7 +520,6 @@
           error: (err)=> reject(err)
         });
       });
-      // Fallback sur ; puis ,
       const cols = out.meta?.fields?.length || 0;
       if (cols <= 1) {
         out = await parseWithDelimiter(path, ";");
@@ -459,8 +531,7 @@
     }
 
     async function loadSelectedSource(){
-      const idx=+sourceSelect.value;
-      const src=SOURCES[idx]; if(!src) return;
+      const idx=+sourceSelect.value; const src=SOURCES[idx]; if(!src) return;
       RAW = await loadCSV(withBuster(src.path));
       DATA = enrich(RAW);
       seedFilterBounds(DATA);
@@ -477,7 +548,6 @@
           "pred_price_fair","pred_price_lo","pred_price_hi",
           "deal_label","description","engine_liters","euro_norm",
           "body_type","color","options",
-          // images possibles
           "images","image_urls","photos","pictures","pics","thumbnails","media","gallery","srcset","src_set","src",
           "cover_url","image","img","img_url","img_urls","first_image_url"
         ];
@@ -605,7 +675,7 @@
       const trans= row.transmission ?? "";
       const euro = row.euro_norm ?? "";
       const co2  = safeInt(row.co2_gkm);
-      const doors= safeInt(row.doors); // on ne l'affiche pas si vide
+      const doors= safeInt(row.doors);
       const body = (row.body_type ?? "") || (row.color ?? "");
       const cells=[];
       if (km)   cells.push(["Kilométrage", km]);
@@ -614,7 +684,6 @@
       if (trans)cells.push(["Transmission", trans]);
       if (euro) cells.push(["Euronorm", euro]);
       if (co2)  cells.push(["CO₂ (g/km)", co2]);
-      // Pas de puissance / pas de note vendeur ; portes seulement si présent ET utile
       if (doors)cells.push(["Portes", doors]);
       if (body) cells.push(["Carrosserie/Couleur", body]);
       if (!cells.length) return "";
@@ -629,7 +698,6 @@
       `;
     }
 
-    // Galerie -> seulement la première image (mais on garde la robustesse de détection & debug)
     function galleryHTML(imgs = [], gid) {
       const list = Array.from(new Set((imgs || []).filter(Boolean)));
       if (list.length === 0) {
@@ -644,20 +712,14 @@
         <div class="space-y-3">
           <div class="relative w-full">
             <div style="aspect-ratio:16/9" class="img-frame">
-              <img id="${gid}_cover"
-                   class="img-cover"
-                   loading="lazy"
-                   referrerpolicy="no-referrer"
-                   alt="photo de l'annonce"
-                   src="${cover}"
-                   onerror="window.__imgFallback(this)" />
+              <img id="${gid}_cover" class="img-cover" loading="lazy" referrerpolicy="no-referrer"
+                   alt="photo de l'annonce" src="${cover}" onerror="window.__imgFallback(this)" />
             </div>
           </div>
         </div>
       `;
     }
 
-    // Swap d’image (conservé pour compat compat, pas utilisé car 1 image)
     window.swapCover = (gid, url, el) => {
       const img = document.getElementById(gid+"_cover");
       if (img) { img.src = url; img.closest('div')?.classList.remove('img-skeleton'); }
@@ -669,7 +731,7 @@
     function card(row, idxAbs){
       const title = [row.make?.toString().trim(), row.model?.toString().trim(), Number.isFinite(+row.year)? String(+row.year) : ""]
         .filter(Boolean).join(" ") || "Annonce";
-      const dhtml = buildDescription(row.description || "", 'desc_' + idxAbs, 240);
+      const dhtml = buildDescription(row.description || "", 'desc_' + idxAbs, 120);
       const lo=row.pred_price_lo, hi=row.pred_price_hi, fair=row.pred_price_fair, price=row.price_eur;
       let expl="";
       if (Number.isFinite(+price) && Number.isFinite(+fair)){
@@ -708,11 +770,16 @@
             ${infoGrid(row)}
             ${expl ? `<p class="text-sm">${expl}</p>` : ``}
             ${tags(row) ? `<div class="mt-1 flex flex-wrap gap-2">${tags(row)}</div>` : ``}
-            ${url && url.startsWith("http") ? `
-              <div class="pt-2">
-                <a class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white font-extrabold hover:bg-slate-50"
-                   href="${url}" target="_blank" rel="noopener">Voir l’annonce</a>
-              </div>` : ``}
+            ${
+              url && url.startsWith("http")
+              ? `<div class="pt-2">
+                   <button class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white font-extrabold hover:bg-slate-50"
+                           onclick="goToAd('${url.replace(/'/g,"&#39;")}')">
+                     Voir l’annonce
+                   </button>
+                 </div>`
+              : ``
+            }
             ${debugBlock}
           </div>
         </article>
@@ -722,7 +789,6 @@
     function render(){
       const info = $("resultInfo");
       info.textContent = `${VIEW.length} annonce(s) trouvée(s)`;
-
       const total = VIEW.length;
       const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
       PAGE = Math.min(Math.max(1,PAGE), totalPages);
@@ -736,7 +802,10 @@
     }
 
     // ================== Boot ==================
-    window.addEventListener("DOMContentLoaded", loadManifest);
+    window.addEventListener("DOMContentLoaded", ()=>{
+      renderAccount();
+      loadManifest();
+    });
   </script>
 </body>
 </html>
