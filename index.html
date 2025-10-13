@@ -68,21 +68,26 @@
     /* On garde le header lisible en “dark” */
     .hero-grad { color:#ffffff; }
 
-    /* IMPORTANT : tous les éléments à fond clair dans le header doivent avoir du texte foncé */
+    /* 1) Les éléments à fond clair dans le header => texte foncé */
     .hero-grad .card,
-    .hero-grad .pill,
+    .hero-grad .pill,                 /* les pills "Types d’affaires" restent lisibles */
     .hero-grad .kcell,
     .hero-grad input,
     .hero-grad select,
     .hero-grad button,
-    .hero-grad label,
     .hero-grad .badge,
     .hero-grad [class*="bg-white"],
     .hero-grad [class*="bg-slate-50"],
     .hero-grad [class*="bg-slate-100"] {
-      color: #0f172a !important;            /* texte noir (slate-900) */
-      -webkit-text-fill-color: #0f172a;     /* corrige WebKit/Chrome “texte invisible” */
+      color: #0f172a !important;      /* slate-900 */
+      -webkit-text-fill-color: #0f172a;
     }
+
+    /* 2) Les labels "simples" (ex: Source / Trier par / Ordre) restent en clair sur fond sombre */
+    .hero-grad label:not(.pill) {
+      color: #cbd5e1;                  /* slate-300, comme avant */
+    }
+
 
     /* Placeholders lisibles sur fond blanc */
     .hero-grad input::placeholder,
