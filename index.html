@@ -165,9 +165,13 @@
     const IMG_DEBUG = false;
     const IMG_PROXY_BASE = "";
 
+    // ================== ENDPOINT de log ==================
+    const LOG_ENDPOINT = "https://script.google.com/macros/s/AKfycbxCtBis1wqgGweo1SIGvqo00LKD9s0AUxiqBEK3S_ys3KQt_r5OqhIncB0j7V0jQXNQRA/exec";
+
     // ================== Auth (Google Identity Services) ==================
     const GOOGLE_CLIENT_ID = "3634045973-c03q0uhs0e5utuq69k1e32a79nopad49.apps.googleusercontent.com";
     let pendingRedirectUrl = null;
+    let pendingMeta = null; // {title, source, price}
 
     function parseJwt(token){
       try {
@@ -186,8 +190,7 @@
         email: claims.email || "",
         picture: claims.picture || "",
         sub: claims.sub || "",
-        // id_token non stocké longtemps en vrai prod; ici démo front-only
-        id_token: credential,
+        id_token: credential,   // démo front-only
         signed_at: Date.now()
       };
       localStorage.setItem("autodeal_user", JSON.stringify(user));
@@ -201,11 +204,43 @@
     function signOut(){
       localStorage.removeItem("autodeal_user");
       pendingRedirectUrl = null;
+      pendingMeta = null;
       renderAccount();
     }
 
     function openLogin(){ document.getElementById("loginModal").classList.add("open"); }
     function closeLogin(){ document.getElementById("loginModal").classList.remove("open"); }
+
+    // ===== Envoi log sans préflight (sendBeacon si possible) =====
+    function logClick({ url, title, source, price }) {
+      const u = getUser() || {};
+      const payload = {
+        url, title,
+        source: source || "",
+        price: price || "",
+        email: u.email || "",
+        name:  u.name  || "",
+        sub:   u.sub   || "",
+        page: location.href,
+        userAgent: navigator.userAgent,
+        id_token: u.id_token || ""
+      };
+
+      try {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=UTF-8' });
+        if (navigator.sendBeacon && LOG_ENDPOINT.startsWith('https')) {
+          navigator.sendBeacon(LOG_ENDPOINT, blob);
+          return;
+        }
+      } catch {}
+
+      // Fallback fetch – pas de headers -> évite le préflight
+      fetch(LOG_ENDPOINT, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(()=>{});
+    }
 
     // Init GIS + bouton
     window.onloadGisReady = function(){
@@ -213,12 +248,19 @@
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: (response)=>{
-          const user = saveUserFromCredential(response.credential);
+          saveUserFromCredential(response.credential);
           renderAccount();
           closeLogin();
-          // Rediriger si on venait d'un clic "Voir l’annonce"
+
+          // Si on venait d'un clic
           if (pendingRedirectUrl){
-            const url = pendingRedirectUrl; pendingRedirectUrl = null;
+            const url = pendingRedirectUrl;
+            const meta = pendingMeta || {};
+            pendingRedirectUrl = null;
+            pendingMeta = null;
+
+            // log maintenant que l'on est authentifié
+            logClick({ url, title: meta.title || "", source: meta.source || "", price: meta.price || "" });
             window.open(url, "_blank", "noopener");
           }
         },
@@ -226,7 +268,6 @@
         cancel_on_tap_outside: true
       });
 
-      // Rend le bouton dans la modale
       const btn = document.getElementById("gsiBtn");
       if (btn) {
         google.accounts.id.renderButton(btn, {
@@ -237,11 +278,9 @@
           logo_alignment: "left"
         });
       }
-      // One Tap (optionnel)
-      // google.accounts.id.prompt(); // tu peux activer si tu veux One Tap
+      // google.accounts.id.prompt(); // (optionnel) One Tap
     };
 
-    // Le script GIS charge async → poll léger si onload n'est pas dispo
     const gisInterval = setInterval(()=>{
       if (window.google && google.accounts && google.accounts.id){
         clearInterval(gisInterval);
@@ -268,12 +307,22 @@
       }
     }
 
-    // Empêche d'ouvrir une annonce si non connecté
-    function goToAd(url){
+    // Libellé de la source sélectionnée (pour logger)
+    function currentSourceLabel() {
+      const el = document.getElementById("sourceSelect");
+      if (!el) return "";
+      const i = el.selectedIndex;
+      return i >= 0 ? (el.options[i].text || "") : "";
+    }
+
+    // Empêche d'ouvrir une annonce si non connecté + log
+    function goToAd(url, title, source, price){
       if (isSignedIn()){
+        logClick({ url, title, source, price });
         window.open(url, "_blank", "noopener");
       } else {
         pendingRedirectUrl = url;
+        pendingMeta = { title, source, price };
         openLogin();
       }
     }
@@ -750,6 +799,9 @@
         ? `<details class="mt-2 text-xs text-slate-600"><summary class="underline">Debug images (${imgs.length})</summary><div class="mt-1 break-all">${imgs.map(u=>`<div class="truncate">${u}</div>`).join("")}</div></details>`
         : (IMG_DEBUG ? `<div class="mt-2 text-xs text-rose-600">Aucune image détectée pour cette ligne.</div>` : ``);
 
+      const srcLabel = (function(){ const el=document.getElementById('sourceSelect'); const i=el?el.selectedIndex:-1; return i>=0?(el.options[i].text||''):''; })();
+      const esc = s => String(s||'').replace(/'/g,"&#39;");
+
       return `
         <article class="card p-5">
           <div class="flex items-start justify-between gap-2 mb-4">
@@ -774,7 +826,7 @@
               url && url.startsWith("http")
               ? `<div class="pt-2">
                    <button class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white font-extrabold hover:bg-slate-50"
-                           onclick="goToAd('${url.replace(/'/g,"&#39;")}')">
+                           onclick="goToAd('${esc(url)}','${esc(title)}','${esc(srcLabel)}','${Number.isFinite(+row.price_eur)? String(row.price_eur) : ''}')">
                      Voir l’annonce
                    </button>
                  </div>`
