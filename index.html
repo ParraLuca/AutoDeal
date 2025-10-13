@@ -125,6 +125,15 @@
             <input id="yearMax" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
           </div>
         </div>
+        <!-- Types d'affaires -->
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <span class="text-xs text-slate-300 font-semibold mr-2">Types d’affaires</span>
+          <label class="pill bg-white"><input id="tSuper"   type="checkbox" class="mr-2" checked>Super affaire</label>
+          <label class="pill bg-white"><input id="tGood"    type="checkbox" class="mr-2" checked>Bonne affaire</label>
+          <label class="pill bg-white"><input id="tFair"    type="checkbox" class="mr-2" checked>Prix correct</label>
+          <label class="pill bg-white"><input id="tOver"    type="checkbox" class="mr-2" checked>Surévaluée</label>
+          <label class="pill bg-white"><input id="tSuspect" type="checkbox" class="mr-2">Suspect</label>
+        </div>
       </div>
     </div>
   </header>
@@ -531,18 +540,16 @@
         ( (+row.has_accident===1) && ( (+row.has_engine_issue===1) || (+row.has_gearbox_issue===1) || (+row.has_airbag_deployed===1) ) );
 
       if (mlSuspect || textCritical || hasHugeDiscount) {
-        return ["Suspect", "red"]; // badge rouge
+        return ["Suspect", "red", "suspect"];
       }
 
-      // Sinon, on revient à l’échelle habituelle sur la remise
-      if (dp==null || !Number.isFinite(+dp)) return ["À considérer","gray"];
+      if (dp==null || !Number.isFinite(+dp)) return ["À considérer","gray","fair"];
       const pct = +dp*100;
-      if (pct>=25) return ["Super affaire","green"];
-      if (pct>=10) return ["Bonne affaire","amber"];
-      if (pct<-5)  return ["Surévaluée","red"];
-      return ["Prix correct","gray"];
+      if (pct>=25) return ["Super affaire","green","super"];
+      if (pct>=10) return ["Bonne affaire","amber","good"];
+      if (pct<-5)  return ["Surévaluée","red","over"];
+      return ["Prix correct","gray","fair"];
     }
-
 
     // ================== État global ==================
     let SOURCES=[]; let RAW=[]; let DATA=[]; let VIEW=[]; let PAGE=1;
@@ -559,6 +566,9 @@
     orderSelect.addEventListener("change", applyFilters);
     idsBounds.forEach(id => $(id).addEventListener("input", applyFilters));
     sourceSelect.addEventListener("change", async ()=>{ await loadSelectedSource(); });
+    ["tSuper","tGood","tFair","tOver","tSuspect"].forEach(id=>{
+      const el=$(id); if (el) el.addEventListener("change", applyFilters);
+    });
 
     // ================== Manifest/sources ==================
     async function fetchJSON(url){
@@ -664,9 +674,11 @@
         row.discount_eur=disc;
         row.discount_pct=(disc!=null && fair) ? (disc/fair) : null;
 
-        const [lbl, cls] = decideRow(row);
+        const [lbl, cls, code] = decideRow(row);
         row.decision_label = lbl;
         row.decision_class = cls;
+        row.decision_code  = code;  // <- pour le filtre
+
 
         row.options_list=toList(row.options);
         row._images=getImages(row);
@@ -699,15 +711,35 @@
         yearMax:+$("yearMax").value || +Infinity,
         sort:$("sortSelect").value,
         asc:$("orderSelect").value==="asc",
+        types: selectedDealTypes(),              // <- AJOUT
       };
+    }
+
+    function selectedDealTypes(){
+      return new Set([
+        $("tSuper")?.checked && "super",
+        $("tGood")?.checked && "good",
+        $("tFair")?.checked && "fair",
+        $("tOver")?.checked && "over",
+        $("tSuspect")?.checked && "suspect",
+      ].filter(Boolean));
     }
 
     function resetFilters(){
       idsBounds.forEach(id => { $(id).value=""; });
       sortSelect.value = "Remise (%)";
       orderSelect.value = "desc";
+
+      // Types d’affaires par défaut :
+      if ($("tSuper"))   $("tSuper").checked = true;
+      if ($("tGood"))    $("tGood").checked = true;
+      if ($("tFair"))    $("tFair").checked = true;
+      if ($("tOver"))    $("tOver").checked = true;
+      if ($("tSuspect")) $("tSuspect").checked = false;  // <- exclu par défaut
+
       applyFilters();
     }
+
 
     function applyFilters(){
       const f=currentFilters();
@@ -716,8 +748,10 @@
         const okP=Number.isFinite(p)? (p>=f.priceMin && p<=f.priceMax) : true;
         const okY=Number.isFinite(y)? (y>=f.yearMin && y<=f.yearMax) : true;
         const okK=Number.isFinite(k)? (k>=f.kmMin   && k<=f.kmMax)   : true;
-        return okP && okY && okK;
+        const okT=f.types.has(r.decision_code||"");                // <- AJOUT
+        return okP && okY && okK && okT;                           // <- AJOUT
       });
+
 
       let col="discount_pct";
       if (f.sort==="Remise (€)") col="discount_eur";
