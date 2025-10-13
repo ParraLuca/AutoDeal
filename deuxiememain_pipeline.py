@@ -940,19 +940,50 @@ def to_topn(series: pd.Series, topn=TOP_CAT_MAX) -> pd.Series:
 
 # ─────────── Analyse description (flags FR/NL/EN) ───────────
 
+# ── Drapeaux négatifs (FR/NL/EN) bien plus larges, robustes aux fautes courantes ──
 DESC_NEG_PATTERNS = {
     "has_export": r"\b(export|voor\s+export|alleen\s+export|exportvoertuig|destin[ée]e?\s+à\s+l'?export)\b",
-    "has_ct_fail": r"(contr[ôo]le?\s+technique|keuring).{0,60}\b(refus[ée]e?|afgekeurd|herkeuring|rode?\s+kaart)",
-    "has_accident": r"\b(accident[ée]?|sinistr[ée]?|ongeval|botsing)\b",
-    "has_damage": r"\b(cass[ée]e?s?|cassure?s?|griffes?|rayures?|krassen?|deuk(en)?|bosse?s?)\b",
-    "has_engine_issue": r"(moteur|motor).{0,40}\b(hs|panne|defect|defekt|kapot|à\s+remplacer)",
-    "has_gearbox_issue": r"(bo[iî]te|bo[îi]te\s+de\s+vitesses|versnellingsbak).{0,40}\b(hs|panne|defect|schakelt\s+slecht|à\s+remplacer)",
-    "has_non_rolling": r"\b(non\s+roulant|ne\s+roule\s+pas|niet\s+rijdend)\b",
+
+    # Contrôle technique refusé OU formulation négative "ne passe pas le CT", fautes incluses
+    "has_ct_fail": r"((contr[ôo]?le?\s*techn[iy]q?u?e|techinque|keuring).{0,60}\b(refus[ée]s?|rejet[ée]?|afgekeurd|herkeuring|rode?\s*kaart))"
+                   r"|(\bne\s*(passe|passera)\s*pas\s*le\s*(contr[ôo]?le?\s*techn[iy]q?u?e|techinque)\b)"
+                   r"|(\bkeuring\b.{0,20}\b(niet\s*ok|afgekeurd)\b)",
+
+    # Accident / sinistre (FR) + NL
+    "has_accident": r"\b(accident[ée]s?|sinistr[ée]s?|choc|impact)\b"
+                    r"|(\bongeval\b|\bbotsing\b|\baanrijding\b)",
+
+    # Dégâts / choc visible
+    "has_damage": r"\b(cass[ée]e?s?|cassure?s?|griffes?|rayures?|éraflures?|bosses?|deuk(en)?|schade|krassen?)\b"
+                  r"|(\b(avant|arrière|côté|portière|pare[-\s]?chocs?)\b.{0,12}\b(accident[ée]?|endommag[ée]?|pli[ée]?|tordu[es]?)\b)",
+
+    # Moteur / boîte HS
+    "has_engine_issue": r"(moteur|motor).{0,40}\b(hs|panne|defect|defekt|kapot|à\s*remplacer|serré|blown)\b",
+    "has_gearbox_issue": r"(bo[iî]te(\s*de\s*vitesses)?|versnellingsbak|boite).{0,40}\b(hs|panne|defect|kapot|cass[ée]e?|à\s*remplacer)\b",
+
+    # Non roulant / ne démarre pas (FR/NL)
+    "has_non_rolling": r"\b(non\s*roulant|ne\s*roule\s*pas|non\s*startant|ne\s*d[ée]marre\s*pas)\b"
+                       r"|(\bniet\s*rijdend\b|\bstart\s*niet\b)",
+
+    # Rouille, fumée/bruit, etc.
     "has_rust": r"\b(rouille|roest)\b",
     "has_oil_consumption": r"(consommation\s+d['’]huile|olieverbruik)\b",
-    "has_noise_smoke": r"\b(fum[ée]e?s?|rook|bruit|geluid)\b",
-    "has_km_not_guaranteed": r"(kilom[ée]trage\s+non\s+garanti|km-?stand\s+niet\s+gegarandeerd)"
+    "has_noise_smoke": r"\b(fum[ée]e?s?|rook|bruit|geluid|tikte?n?)\b",
+    "has_km_not_guaranteed": r"(kilom[ée]trage\s*non\s*garanti|km-?stand\s*niet\s*gegarandeerd)",
+
+    # Assurance non déclarée / problème d’assurance
+    "has_insurance_issue": r"(pas|non)\s*d[ée]clar[ée]e?\s*(à|a)\s*l'?assurance"
+                           r"|(\bnon\s*assur[ée]e?\b)|(\bniet\s*aangegeven\s*bij\s*de\s*verzekering\b)"
+                           r"|(\bnot\s*declared\s*to\s*insurance\b)",
+
+    # Sécurité passive : airbags, ceintures
+    "has_airbag_deployed": r"\b(airbags?\s*(sorti|d[ée]ploy[ée]s?)|airbag\s*(uit|afgegaan))\b",
+    "has_seatbelt_blocked": r"\b(ceintures?\s*(bloqu[ée]e?s?|bloquee?s?)|gordel\s*(geblokkeerd|vast))\b",
+
+    # Mots-clés "pour pièces" (toutes variantes FR/NL/EN, accent/fautes inclus)
+    "has_for_parts": r"\b(pour[\s-]*pi[eè]ce?s?|pour[\s-]*pieces?|spare[\s-]*parts?|for[\s-]*parts?|voor[\s-]*onderdelen?)\b",
 }
+
 
 DESC_POS_PATTERNS = {
     "has_ct_ok": r"(contr[ôo]le?\s+technique|keuring).{0,40}\b(ok|valide|goedgekeurd)",
@@ -967,14 +998,31 @@ DESC_POS_PATTERNS = {
 
 # Expressions FR/NL/EN très indicatives d'une voiture non roulante / pas prête à rouler
 HARD_NEG_PATTERNS = [
-    r"\b(non\s*roulant|ne\s*roule\s*pas|non\s*startant|ne\s*démarre\s*pas)\b",
+    # Non roulant / ne démarre pas
+    r"\b(non\s*roulant|ne\s*roule\s*pas|non\s*startant|ne\s*d[ée]marre\s*pas)\b",
     r"\b(niet\s*rijdend|start\s*niet)\b",
-    r"\b(pour\s*pi[eè]ces|voor\s*onderdelen|for\s*parts)\b",
-    r"(moteur|motor).{0,30}\b(hs|dead|defect|defekt|kapot|à\s*remplacer)\b",
-    r"(bo[iî]te(\s*de\s*vitesses)?|versnellingsbak).{0,30}\b(hs|cass[ée]e?|kapot|defect)\b",
-    r"\b(casse\s*moteur|serrage\s*moteur|blown\s*engine)\b",
-    r"\b(keuring\s*afgekeurd|contr[ôo]le\s*technique.{0,20}(refus|rejet|non\s*valide))\b",
-    r"\b(export\s*only|alleen\s*export)\b",
+
+    # Pour pièces
+    r"\b(pour[\s-]*pi[eè]ce?s?|pour[\s-]*pieces?|spare[\s-]*parts?|for[\s-]*parts?|voor[\s-]*onderdelen?)\b",
+
+    # Moteur / boîte HS (fort signal)
+    r"(moteur|motor).{0,30}\b(hs|dead|defect|defekt|kapot|à\s*remplacer|serr[ée]?)\b",
+    r"(bo[iî]te(\s*de\s*vitesses)?|versnellingsbak|boite).{0,30}\b(hs|cass[ée]e?|kapot|defect|à\s*remplacer)\b",
+
+    # CT refusé / ne passe pas (FR fautes + NL)
+    r"((contr[ôo]?le?\s*techn[iy]q?u?e|techinque|keuring).{0,40}\b(refus[ée]s?|rejet[ée]?|afgekeurd|rode?\s*kaart))"
+    r"|(\bne\s*(passe|passera)\s*pas\s*le\s*(contr[ôo]?le?\s*techn[iy]q?u?e|techinque)\b)"
+    r"|(\bkeuring\b.{0,20}\b(niet\s*ok|afgekeurd)\b)",
+
+    # Accident explicite
+    r"\b(accident[ée]s?|sinistr[ée]s?|ongeval|botsing|aanrijding)\b",
+
+    # Assurance non déclarée -> très mauvais signal
+    r"(pas|non)\s*d[ée]clar[ée]e?\s*(à|a)\s*l'?assurance|\bnot\s*declared\s*to\s*insurance\b|\bniet\s*aangegeven\s*bij\s*de\s*verzekering\b",
+
+    # Airbag/ceinture (déployé/bloquée) — indicateur d'impact
+    r"\b(airbags?\s*(sorti|d[ée]ploy[ée]s?)|airbag\s*(uit|afgegaan))\b",
+    r"\b(ceintures?\s*(bloqu[ée]e?s?)|gordel\s*(geblokkeerd|vast))\b",
 ]
 HARD_NEG_RE = re.compile("|".join(HARD_NEG_PATTERNS), re.I)
 
@@ -1006,16 +1054,38 @@ def extract_desc_flags(text: str) -> Dict[str, int | float]:
 def weak_label_unroadworthy_row(row: pd.Series) -> int:
     """
     Étiquette faible conservatrice : 1 si la description/flags suggèrent
-    que la voiture n'est pas prête à rouler.
+    que la voiture n'est pas prête à rouler (FR/NL/EN, fautes incluses).
     """
     desc = str(row.get("desc_text") or "")
     hard_hit = bool(HARD_NEG_RE.search(desc))
+
     many_neg = int(row.get("cond_neg", 0)) >= 2
     very_bad_score = float(row.get("cond_score", 0.0)) <= -2.0
+
     engine_or_gearbox = int(row.get("has_engine_issue", 0)) == 1 or int(row.get("has_gearbox_issue", 0)) == 1
     non_rolling = int(row.get("has_non_rolling", 0)) == 1
     ct_fail = int(row.get("has_ct_fail", 0)) == 1
-    return int(hard_hit or non_rolling or ct_fail or (engine_or_gearbox and (many_neg or very_bad_score)))
+    accident = int(row.get("has_accident", 0)) == 1
+    insurance = int(row.get("has_insurance_issue", 0)) == 1
+    airbag = int(row.get("has_airbag_deployed", 0)) == 1
+    belt = int(row.get("has_seatbelt_blocked", 0)) == 1
+    for_parts = int(row.get("has_for_parts", 0)) == 1
+
+    # Règles conservatrices :
+    # - hard_hit OU non_rolling OU ct_fail OU for_parts : 1 direct
+    # - accident + (airbag|belt|engine/gearbox) : 1
+    # - insurance issue + accident : 1
+    # - engine/gearbox + (many_neg ou very_bad_score) : 1
+    if hard_hit or non_rolling or ct_fail or for_parts:
+        return 1
+    if accident and (airbag or belt or engine_or_gearbox):
+        return 1
+    if insurance and accident:
+        return 1
+    if engine_or_gearbox and (many_neg or very_bad_score):
+        return 1
+    return 0
+
 
 
 def train_condition_classifier(df: pd.DataFrame, outdir: str, target_precision: float = 0.95) -> Dict[str, Any]:
