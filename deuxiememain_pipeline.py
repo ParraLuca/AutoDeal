@@ -52,6 +52,11 @@ from bs4 import BeautifulSoup
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers chemins: tout par dossier de run
 # ───────────────────────────────────────────────────────────────────────────────
+
+# ----- Condition classifier (high-precision filter for unroadworthy ads)
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_curve, precision_score, recall_score, f1_score
+
 def ensure_dir(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
@@ -960,6 +965,19 @@ DESC_POS_PATTERNS = {
     "runs_perfect": r"(roule|rijdt).{0,20}(parfait|perfect)"
 }
 
+# Expressions FR/NL/EN très indicatives d'une voiture non roulante / pas prête à rouler
+HARD_NEG_PATTERNS = [
+    r"\b(non\s*roulant|ne\s*roule\s*pas|non\s*startant|ne\s*démarre\s*pas)\b",
+    r"\b(niet\s*rijdend|start\s*niet)\b",
+    r"\b(pour\s*pi[eè]ces|voor\s*onderdelen|for\s*parts)\b",
+    r"(moteur|motor).{0,30}\b(hs|dead|defect|defekt|kapot|à\s*remplacer)\b",
+    r"(bo[iî]te(\s*de\s*vitesses)?|versnellingsbak).{0,30}\b(hs|cass[ée]e?|kapot|defect)\b",
+    r"\b(casse\s*moteur|serrage\s*moteur|blown\s*engine)\b",
+    r"\b(keuring\s*afgekeurd|contr[ôo]le\s*technique.{0,20}(refus|rejet|non\s*valide))\b",
+    r"\b(export\s*only|alleen\s*export)\b",
+]
+HARD_NEG_RE = re.compile("|".join(HARD_NEG_PATTERNS), re.I)
+
 def _desc_clean(text: str) -> str:
     text = str(text or "")
     text = text.lower()
@@ -984,6 +1002,68 @@ def extract_desc_flags(text: str) -> Dict[str, int | float]:
     out["desc_len"] = float(len(t))
 
     return out
+
+def weak_label_unroadworthy_row(row: pd.Series) -> int:
+    """
+    Étiquette faible conservatrice : 1 si la description/flags suggèrent
+    que la voiture n'est pas prête à rouler.
+    """
+    desc = str(row.get("desc_text") or "")
+    hard_hit = bool(HARD_NEG_RE.search(desc))
+    many_neg = int(row.get("cond_neg", 0)) >= 2
+    very_bad_score = float(row.get("cond_score", 0.0)) <= -2.0
+    engine_or_gearbox = int(row.get("has_engine_issue", 0)) == 1 or int(row.get("has_gearbox_issue", 0)) == 1
+    non_rolling = int(row.get("has_non_rolling", 0)) == 1
+    ct_fail = int(row.get("has_ct_fail", 0)) == 1
+    return int(hard_hit or non_rolling or ct_fail or (engine_or_gearbox and (many_neg or very_bad_score)))
+
+
+def train_condition_classifier(df: pd.DataFrame, outdir: str, target_precision: float = 0.95) -> Dict[str, Any]:
+    """
+    Entraîne un classifieur texte binaire 'is_unroadworthy' (TF-IDF + LR) sur des étiquettes faibles.
+    Sauvegarde: condition_clf.joblib + condition_meta.json (seuil calibré).
+    """
+    os.makedirs(outdir, exist_ok=True)
+    base = preprocess(df, for_training=True).reset_index(drop=True)
+    if "text_all" not in base.columns:
+        base["options_text"] = base.get("options", pd.Series([""]*len(base))).apply(list_to_text).astype(str)
+        base["desc_text"] = base.get("description", pd.Series([""]*len(base))).astype(str).fillna("").str.slice(0, 2000)
+        base["text_all"] = (base["options_text"] + " " + base["desc_text"]).str.strip()
+
+    base["label_unroadworthy"] = base.apply(weak_label_unroadworthy_row, axis=1).astype(int)
+
+    # Vectoriseur + classif
+    vec = TfidfVectorizer(max_features=20000, ngram_range=(1,2), min_df=3)
+    X = vec.fit_transform(base["text_all"].astype(str).fillna(""))
+    y = base["label_unroadworthy"].values
+
+    clf = LogisticRegression(max_iter=1000, class_weight="balanced")
+    clf.fit(X, y)
+
+    # Seuil haute précision
+    probs = clf.predict_proba(X)[:, 1]
+    precision, recall, thresholds = precision_recall_curve(y, probs)
+    chosen = 0.5
+    for p, t in zip(precision, np.r_[thresholds, 1.0]):
+        if p >= target_precision:
+            chosen = float(t); break
+
+    joblib.dump((vec, clf), Path(outdir) / "condition_clf.joblib", compress=3)
+    with open(Path(outdir) / "condition_meta.json", "w", encoding="utf-8") as f:
+        json.dump({"threshold": chosen, "target_precision": float(target_precision)}, f, ensure_ascii=False, indent=2)
+
+    return {"n": int(X.shape[0]), "pos_rate": float(y.mean()), "threshold": chosen}
+
+
+def predict_condition_proba(df: pd.DataFrame, artifacts_dir: str) -> np.ndarray:
+    """
+    Charge le classif sauvegardé et renvoie la proba 'non roulante' pour chaque ligne.
+    """
+    vec, clf = joblib.load(Path(artifacts_dir) / "condition_clf.joblib")
+    # Reconstruire le texte comme dans preprocess
+    Xtmp = preprocess(df, for_training=False).reset_index(drop=True)
+    Xtxt = Xtmp["text_all"].astype(str).fillna("")
+    return clf.predict_proba(vec.transform(Xtxt))[:, 1]
 
 
 def preprocess(df: pd.DataFrame, for_training=True) -> pd.DataFrame:
@@ -1122,7 +1202,25 @@ def json_safe(x):
 
 def train_models(df: pd.DataFrame, outdir: str, n_folds: int = FOLD_K) -> Dict[str, Any]:
     os.makedirs(outdir, exist_ok=True)
-    base = preprocess(df, for_training=True).reset_index(drop=True)
+
+    # ===== 1) Entraîner le classif "non roulante" sur étiquettes faibles =====
+    cond_info = train_condition_classifier(df, outdir)  # écrit condition_clf.joblib + condition_meta.json
+    with open(Path(outdir) / "condition_meta.json", "r", encoding="utf-8") as f:
+        cond_meta = json.load(f)
+    cond_thresh = float(cond_meta["threshold"])
+    vec, clf = joblib.load(Path(outdir) / "condition_clf.joblib")
+
+    # ===== 2) Préparer les données (comme avant), puis filtrer =====
+    base_all = preprocess(df, for_training=True).reset_index(drop=True)
+    Xtxt = base_all["text_all"].astype(str).fillna("")
+    probs = clf.predict_proba(vec.transform(Xtxt))[:, 1]
+    base_all["cond_bad_proba"] = probs
+    base_all["is_unroadworthy_pred"] = (probs >= cond_thresh).astype(int)
+
+    # Filtrage dur : on retire les suspectes (recommandé pour éviter de biaiser les prix)
+    base = base_all[ base_all["is_unroadworthy_pred"] == 0 ].reset_index(drop=True)
+    # (Variante pondération douce possible si tu préfères ne pas jeter : sample_weight = 1 - 0.8*probs)
+
 
     # --- clés & folds déterministes
     keys = base.apply(lambda r: row_key(r), axis=1)
@@ -1353,12 +1451,32 @@ def score_file(df: pd.DataFrame, artifacts_dir: str) -> pd.DataFrame:
     out["deal_label"]      = [
         classify_deal(p, f, l, h) for p, f, l, h in zip(out["price_eur"], out["pred_price_fair"], out["pred_price_lo"], out["pred_price_hi"])
     ]
+    # ===== Ajout des signaux "non roulante" au scoring =====
+    cond_meta_path = Path(artifacts_dir) / "condition_meta.json"
+    cond_clf_path  = Path(artifacts_dir) / "condition_clf.joblib"
+    if cond_meta_path.exists() and cond_clf_path.exists():
+        meta = json.loads(cond_meta_path.read_text(encoding="utf-8"))
+        thr = float(meta.get("threshold", 0.5))
+        vec, clf = joblib.load(cond_clf_path)
+
+        Xtxt = X["text_all"].astype(str).fillna("")
+        probs = clf.predict_proba(vec.transform(Xtxt))[:, 1]
+        out["cond_bad_proba"] = probs
+        out["is_unroadworthy_pred"] = (probs >= thr).astype(int)
+
+        # si suspect => label "suspicious" (éviter faux 'good deal' bradés car HS)
+        mask_bad = out["is_unroadworthy_pred"] == 1
+        out.loc[mask_bad, "deal_label"] = "suspicious"
+        # (optionnel) neutraliser le score:
+        # out.loc[mask_bad, "deal_score"] = np.nan
 
     cols_first = [
         "url","ad_id","make","model","year","mileage_km","fuel","transmission","body_type","age_years",
         "price_eur","pred_price_lo","pred_price_fair","pred_price_hi","deal_score","deal_label",
+        "cond_bad_proba","is_unroadworthy_pred",  # ← ajout
         "seller_name","seller_rating","seller_reviews_count","images_count","options_count"
     ]
+
     for c in cols_first:
         if c not in out.columns:
             out[c] = np.nan
