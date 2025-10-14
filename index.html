@@ -1,115 +1,49 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AutoDeal — Meilleurs Deals 2ememain</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AutoDeal — Compare • Évalue • Décide</title>
 
-  <!-- Identité visuelle -->
+  <!-- Fonts + Tailwind -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-
-  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- PapaParse pour CSV -->
+
+  <!-- Libs -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     :root{ --ok:#16a34a; --warn:#d97706; --over:#dc2626; --fair:#334155; }
-    html, body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; }
+    html,body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    .hero-grad{background:linear-gradient(180deg,#0f172a 0%,#0b1223 100%)}
+    .card{border:1px solid #e5e7eb;border-radius:1.25rem;background:white;box-shadow:0 10px 28px rgba(2,6,23,.06)}
+    .pill{border:1px solid #e5e7eb;border-radius:9999px;padding:.55rem .9rem;font-weight:700}
     .badge{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid #e5e7eb;font-weight:700}
     .dot{width:.6rem;height:.6rem;border-radius:9999px}
-    .badge.green .dot{background:var(--ok)}
-    .badge.amber .dot{background:var(--warn)}
-    .badge.red .dot{background:var(--over)}
-    .badge.gray .dot{background:var(--fair)}
-    .card{border:1px solid #e5e7eb;border-radius:1.25rem;background:white;box-shadow:0 10px 28px rgba(2,6,23,.06)}
+    .badge.green .dot{background:var(--ok)} .badge.amber .dot{background:var(--warn)}
+    .badge.red .dot{background:var(--over)} .badge.gray .dot{background:var(--fair)}
     .kcell{border:1px dashed #e5e7eb;border-radius:1rem;background:#f8fafc;padding:.8rem .9rem}
     .pairs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
     .grid-3x3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.9rem}
-    .hero-grad{background:linear-gradient(180deg, #0f172a 0%, #0b1223 100%)}
-    .pill{border:1px solid #e5e7eb;border-radius:9999px;padding:.55rem .9rem;font-weight:700}
-    .thumb{object-fit:cover;width:72px;height:72px;border-radius:.6rem;border:1px solid #e5e7eb;background:#f1f5f9;cursor:pointer;flex:0 0 auto}
-    .thumb.active{outline:2px solid #0f172a}
-    /* Image principale : une seule, non zoomée */
-    .img-cover{width:100%;height:100%;object-fit:contain;border-radius:1rem;border:1px solid #e5e7eb;background:#0b1223}
+    @media (max-width:1024px){.grid-3x3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media (max-width:640px){.pairs{grid-template-columns:1fr}.grid-3x3{grid-template-columns:1fr}}
     .img-frame{aspect-ratio:16/9;width:100%;overflow:hidden;border-radius:1rem;border:1px solid #e5e7eb;background:#0b1223}
-    .img-skeleton{background: repeating-linear-gradient(90deg, #f1f5f9, #f1f5f9 10px, #eef2f7 10px, #eef2f7 20px);}
-    @media (max-width: 1024px){ .grid-3x3{grid-template-columns:repeat(2,minmax(0,1fr));} }
-    @media (max-width: 640px){ .pairs{grid-template-columns:1fr;} .grid-3x3{grid-template-columns:1fr;} }
-    details summary::-webkit-details-marker{display:none}
-    details summary{cursor:pointer}
-
-    /* Header compte (avatar) */
+    .img-cover{width:100%;height:100%;object-fit:contain;border-radius:1rem;background:#0b1223}
+    .navlink{border-radius:9999px;padding:.45rem .9rem;font-weight:800}
+    .navlink.active{background:white;color:#0f172a}
     .avatar{width:28px;height:28px;border-radius:9999px;object-fit:cover;border:1px solid #e5e7eb;background:#fff}
-    /* Mini modal login */
-    .modal{
-      position:fixed;inset:0;display:none;align-items:center;justify-content:center;
-      background:rgba(2,6,23,0.5);z-index:50;padding:1rem;
-    }
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,.5);z-index:50;padding:1rem}
     .modal.open{display:flex}
-    /* 1) Empêche l'auto dark-mode des contrôles et textes */
-    :root { color-scheme: light; }
-
-    /* 2) Sécurité : forcer des couleurs lisibles dans les zones claires */
-    body, main, .card, .pill, input, select, button, label, .kcell, .pairs, .grid-3x3 {
-      color: #0f172a; /* slate-900 */
-    }
-
-    /* 4) Certains navigateurs/ thèmes appliquent -webkit-text-fill-color:transparent
-          → on normalise pour éviter le “texte invisible” */
-    * { -webkit-text-fill-color: currentColor; }
-
-    /* 5) Optionnel : rendre la sélection visible (utile pour debug) */
-    ::selection { background: #fde68a; color: #0f172a; } /* amber-200 */
-    /* On garde le header lisible en “dark” */
-    .hero-grad { color:#ffffff; }
-
-    /* 1) Les éléments à fond clair dans le header => texte foncé */
-    .hero-grad .card,
-    .hero-grad .pill,                 /* les pills "Types d’affaires" restent lisibles */
-    .hero-grad .kcell,
-    .hero-grad input,
-    .hero-grad select,
-    .hero-grad button,
-    .hero-grad .badge,
-    .hero-grad [class*="bg-white"],
-    .hero-grad [class*="bg-slate-50"],
-    .hero-grad [class*="bg-slate-100"] {
-      color: #0f172a !important;      /* slate-900 */
-      -webkit-text-fill-color: #0f172a;
-    }
-
-    /* 2) Les labels "simples" (ex: Source / Trier par / Ordre) restent en clair sur fond sombre */
-    .hero-grad label:not(.pill) {
-      color: #cbd5e1;                  /* slate-300, comme avant */
-    }
-
-
-    /* Placeholders lisibles sur fond blanc */
-    .hero-grad input::placeholder,
-    .hero-grad textarea::placeholder {
-      color: #475569;                        /* slate-600 */
-      opacity: 1;
-    }
-
-    /* Désactive les inversions auto “dark mode” des navigateurs/extensions */
-    :root { color-scheme: light; }
-
-    /* Sélection visible (debug pratique) */
-    ::selection { background:#fde68a; color:#0f172a; }
-
-
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
 
-  <!-- HERO / Marque -->
+  <!-- HEADER / NAV -->
   <header class="hero-grad text-white border-b border-slate-800/50">
-    <div class="max-w-4xl mx-auto px-5 py-5">
+    <div class="max-w-6xl mx-auto px-5 py-5">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
@@ -117,26 +51,40 @@
           </div>
           <div>
             <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">AutoDeal</h1>
-            <p class="text-sm sm:text-base text-slate-300">Compare • Évalue • Décide — meilleurs deals 2ememain, lisibles en un coup d’œil.</p>
+            <p class="text-sm sm:text-base text-slate-300">Compare • Évalue • Décide — meilleurs deals 2ememain.</p>
           </div>
         </div>
 
-        <!-- Zone compte -->
-        <div id="accountArea" class="flex items-center gap-3">
-          <!-- rempli par JS: bouton Se connecter OU nom + avatar + déconnexion -->
+        <!-- Right: nav + account -->
+        <div class="flex items-center gap-2">
+          <nav class="hidden sm:flex items-center gap-1 mr-2">
+            <a href="#/browse" id="navBrowse" class="navlink text-white hover:bg-white/10">Annonces</a>
+            <a href="#/estimate" id="navEstimate" class="navlink text-white hover:bg-white/10">Estimer mon véhicule</a>
+            <a href="#/about" id="navAbout" class="navlink text-white hover:bg-white/10">À propos</a>
+          </nav>
+          <div id="accountArea" class="flex items-center gap-2"></div>
         </div>
       </div>
 
-      <!-- Barre de filtres -->
-      <div class="mt-7 bg-white/5 rounded-2xl border border-white/10 p-4 backdrop-blur">
+      <!-- Subheader varies per route -->
+      <div id="subHeader" class="mt-6"></div>
+    </div>
+  </header>
+
+  <!-- VIEWS -->
+  <main class="max-w-6xl mx-auto px-5 py-8">
+    <!-- BROWSE VIEW -->
+    <section id="view-browse" class="hidden">
+      <!-- Controls -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
           <div class="lg:col-span-5">
-            <label class="text-xs text-slate-300 font-semibold block mb-1">Source</label>
-            <select id="sourceSelect" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200"></select>
+            <label class="text-xs text-slate-600 font-semibold block mb-1">Source</label>
+            <select id="sourceSelect" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"></select>
           </div>
           <div class="lg:col-span-3">
-            <label class="text-xs text-slate-300 font-semibold block mb-1">Trier par</label>
-            <select id="sortSelect" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200">
+            <label class="text-xs text-slate-600 font-semibold block mb-1">Trier par</label>
+            <select id="sortSelect" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200">
               <option>Remise (%)</option>
               <option>Remise (€)</option>
               <option>Prix (€)</option>
@@ -146,70 +94,159 @@
             </select>
           </div>
           <div class="lg:col-span-2">
-            <label class="text-xs text-slate-300 font-semibold block mb-1">Ordre</label>
-            <select id="orderSelect" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200">
+            <label class="text-xs text-slate-600 font-semibold block mb-1">Ordre</label>
+            <select id="orderSelect" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200">
               <option value="desc">Décroissant</option>
               <option value="asc">Croissant</option>
             </select>
           </div>
           <div class="lg:col-span-2 flex items-end gap-2">
-            <button id="resetBtn" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200 font-extrabold">Réinitialiser</button>
+            <button id="resetBtn" class="w-full bg-slate-900 text-white rounded-xl px-3 py-2.5 font-extrabold">Réinitialiser</button>
           </div>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
-          <div><label class="text-xs text-slate-300 font-semibold block mb-1">Prix min (€)</label>
-            <input id="priceMin" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
-          </div>
-          <div><label class="text-xs text-slate-300 font-semibold block mb-1">Prix max (€)</label>
-            <input id="priceMax" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
-          </div>
-          <div><label class="text-xs text-slate-300 font-semibold block mb-1">Km min</label>
-            <input id="kmMin" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
-          </div>
-          <div><label class="text-xs text-slate-300 font-semibold block mb-1">Km max</label>
-            <input id="kmMax" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
-          </div>
-          <div><label class="text-xs text-slate-300 font-semibold block mb-1">Année min</label>
-            <input id="yearMin" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
-          </div>
-          <div><label class="text-xs text-slate-300 font-semibold block mb-1">Année max</label>
-            <input id="yearMax" type="number" class="w-full bg-white text-slate-900 rounded-xl px-3 py-2.5 border border-slate-200" />
-          </div>
+          <div><label class="text-xs text-slate-600 font-semibold block mb-1">Prix min (€)</label>
+            <input id="priceMin" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+          <div><label class="text-xs text-slate-600 font-semibold block mb-1">Prix max (€)</label>
+            <input id="priceMax" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+          <div><label class="text-xs text-slate-600 font-semibold block mb-1">Km min</label>
+            <input id="kmMin" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+          <div><label class="text-xs text-slate-600 font-semibold block mb-1">Km max</label>
+            <input id="kmMax" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+          <div><label class="text-xs text-slate-600 font-semibold block mb-1">Année min</label>
+            <input id="yearMin" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+          <div><label class="text-xs text-slate-600 font-semibold block mb-1">Année max</label>
+            <input id="yearMax" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
         </div>
-        <!-- Types d'affaires -->
+
         <div class="mt-3 flex flex-wrap items-center gap-2">
-          <span class="text-xs text-slate-300 font-semibold mr-2">Types d’affaires</span>
-          <label class="pill bg-white"><input id="tSuper"   type="checkbox" class="mr-2" checked>Super affaire</label>
-          <label class="pill bg-white"><input id="tGood"    type="checkbox" class="mr-2" checked>Bonne affaire</label>
-          <label class="pill bg-white"><input id="tFair"    type="checkbox" class="mr-2" checked>Prix correct</label>
-          <label class="pill bg-white"><input id="tOver"    type="checkbox" class="mr-2" checked>Surévaluée</label>
-          <label class="pill bg-white"><input id="tSuspect" type="checkbox" class="mr-2">Suspect</label>
+          <span class="text-xs text-slate-600 font-semibold mr-2">Types d’affaires</span>
+          <label class="pill"><input id="tSuper" type="checkbox" class="mr-2" checked>Super affaire</label>
+          <label class="pill"><input id="tGood" type="checkbox" class="mr-2" checked>Bonne affaire</label>
+          <label class="pill"><input id="tFair" type="checkbox" class="mr-2" checked>Prix correct</label>
+          <label class="pill"><input id="tOver" type="checkbox" class="mr-2" checked>Surévaluée</label>
+          <label class="pill"><input id="tSuspect" type="checkbox" class="mr-2">Suspect</label>
         </div>
       </div>
-    </div>
-  </header>
 
-  <!-- Corps : 1 annonce par ligne -->
-  <main class="max-w-3xl mx-auto px-5 py-10">
-    <div id="resultInfo" class="text-sm text-slate-600 mb-6"></div>
-    <div id="cards" class="flex flex-col gap-8"></div>
+      <div id="resultInfo" class="text-sm text-slate-600 mt-6 mb-4"></div>
+      <div id="cards" class="flex flex-col gap-8"></div>
 
-    <!-- Pagination -->
-    <div class="flex items-center justify-center gap-3 mt-10">
-      <button id="prevBtn" class="pill bg-white hover:bg-slate-50 disabled:opacity-40" disabled>◀ Précédent</button>
-      <div id="pageInfo" class="text-sm text-slate-600"></div>
-      <button id="nextBtn" class="pill bg-white hover:bg-slate-50 disabled:opacity-40" disabled>Suivant ▶</button>
-    </div>
+      <div class="flex items-center justify-center gap-3 mt-10">
+        <button id="prevBtn" class="pill bg-white hover:bg-slate-50 disabled:opacity-40" disabled>◀ Précédent</button>
+        <div id="pageInfo" class="text-sm text-slate-600"></div>
+        <button id="nextBtn" class="pill bg-white hover:bg-slate-50 disabled:opacity-40" disabled>Suivant ▶</button>
+      </div>
+    </section>
+
+    <!-- ESTIMATE VIEW -->
+    <section id="view-estimate" class="hidden">
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Left: form -->
+        <div class="md:col-span-2">
+          <div class="bg-white rounded-2xl border border-slate-200 p-4">
+            <h3 class="text-lg font-extrabold mb-2">Décrire le véhicule</h3>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Marque</label>
+                <input id="qMake" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="ex: Audi"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Modèle</label>
+                <input id="qModel" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="ex: A1 Sportback"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Année</label>
+                <input id="qYear" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="2012"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Kilométrage</label>
+                <input id="qKm" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="224102"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Carburant</label>
+                <select id="qFuel" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200">
+                  <option value="">—</option><option>Essence</option><option>Diesel</option><option>Hybride</option><option>Électrique</option>
+                </select></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Boîte</label>
+                <select id="qTrans" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200">
+                  <option value="">—</option><option>Manuelle</option><option>Automatique</option><option>Séquentielle</option>
+                </select></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Puissance (ch)</label>
+                <input id="qHp" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="90"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Cylindrée (L)</label>
+                <input id="qLiters" type="number" step="0.1" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="1.6"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Euronorm</label>
+                <input id="qEuro" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="Euro 5"/></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">CO₂ (g/km)</label>
+                <input id="qCO2" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Conso (l/100)</label>
+                <input id="qCons" type="number" step="0.1" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Portes</label>
+                <input id="qDoors" type="number" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="5"/></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Carrosserie</label>
+                <input id="qBody" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="ex: Berline, Hatchback"/></div>
+              <div><label class="text-xs text-slate-600 font-semibold block mb-1">Couleur</label>
+                <input id="qColor" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="ex: Blanc"/></div>
+            </div>
+
+            <div class="mt-3">
+              <label class="text-xs text-slate-600 font-semibold block mb-1">Options (séparées par “|”)</label>
+              <input id="qOptions" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="GPS|Sièges chauffants|Radar de recul"/>
+            </div>
+
+            <div class="mt-3">
+              <label class="text-xs text-slate-600 font-semibold block mb-1">Description (utile pour les drapeaux qualité)</label>
+              <textarea id="qDesc" rows="4" class="w-full bg-white rounded-xl px-3 py-2.5 border border-slate-200" placeholder="Entretien suivi, CT ok, non-fumeur…"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 mt-4">
+              <button id="btnEstimate" class="bg-slate-900 text-white rounded-xl px-4 py-2.5 font-extrabold">Estimer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: result -->
+        <div class="md:col-span-1">
+          <div id="estPanel" class="bg-white rounded-2xl border border-slate-200 p-4 sticky top-6">
+            <h3 class="text-lg font-extrabold">Résultat</h3>
+            <div id="estOut" class="mt-2 text-sm text-slate-700">
+              Renseigne ton véhicule puis clique <b>Estimer</b>.
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 p-4 mt-6">
+            <h4 class="font-extrabold mb-1">Astuce</h4>
+            <p class="text-sm text-slate-600">Si l’outil détecte <b>“non roulant”</b> (moteur/boîte HS, CT refusé, “pour pièces”…), aucun prix n’est donné — comme dans le pipeline d’entraînement.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ABOUT VIEW -->
+    <section id="view-about" class="hidden">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <h3 class="text-xl font-extrabold mb-2">Comment ça marche</h3>
+        <ol class="list-decimal pl-6 space-y-2 text-slate-700">
+          <li><b>Scrape</b> 2ememain (onglets Base/Technique/Éco/Options…), normalise marques/modèles et specs FR/NL.</li>
+          <li><b>Train</b> modèles quantiles (q10/q50/q90) + <b>calibration conformale</b> sur résidus OOF.</li>
+          <li><b>Score</b> chaque annonce → <code>pred_price_lo/fair/hi</code> + <i>deal label</i>.</li>
+          <li>Ici, l’estimation front applique les <b>mêmes features et flags</b> sur ton dump, pondère les voisins, et
+              applique la <b>calibration</b> de <code>model_artifacts/calibration.json</code> si présent.</li>
+        </ol>
+      </div>
+    </section>
   </main>
 
-  <footer class="border-t border-slate-200">
-    <div class="max-w-4xl mx-auto px-5 py-8 text-center text-sm text-slate-500">
+  <footer class="border-t border-slate-200 mt-10">
+    <div class="max-w-6xl mx-auto px-5 py-8 text-center text-sm text-slate-500">
       © AutoDeal — prototype démo. Données issues de dumps CSV/JSONL.
     </div>
   </footer>
 
-  <!-- Modal de connexion -->
+  <!-- Login modal -->
   <div id="loginModal" class="modal">
     <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5">
       <h3 class="text-lg font-extrabold mb-2">Se connecter</h3>
@@ -221,778 +258,645 @@
     </div>
   </div>
 
-  <script>
-    // ================== Switch debug images ==================
-    const IMG_DEBUG = false;
-    const IMG_PROXY_BASE = "";
+<script>
+/** ===========================
+ *  CONFIG & GLOBAL STATE
+ *  =========================== */
+const LOG_ENDPOINT = "https://script.google.com/macros/s/AKfycbxCtBis1wqgGweo1SIGvqo00LKD9s0AUxiqBEK3S_ys3KQt_r5OqhIncB0j7V0jQXNQRA/exec";
+const GOOGLE_CLIENT_ID = "3634045973-c03q0uhs0e5utuq69k1e32a79nopad49.apps.googleusercontent.com";
 
-    // ================== ENDPOINT de log ==================
-    const LOG_ENDPOINT = "https://script.google.com/macros/s/AKfycbxCtBis1wqgGweo1SIGvqo00LKD9s0AUxiqBEK3S_ys3KQt_r5OqhIncB0j7V0jQXNQRA/exec";
+const $ = (id)=>document.getElementById(id);
+const fmtEUR = (v)=> Number.isFinite(+v)? (+v).toLocaleString("fr-FR",{maximumFractionDigits:0})+" €" : "—";
+const safeInt = (v)=> Number.isFinite(+v)? (+v).toLocaleString("fr-FR") : "";
 
-    // ================== Auth (Google Identity Services) ==================
-    const GOOGLE_CLIENT_ID = "3634045973-c03q0uhs0e5utuq69k1e32a79nopad49.apps.googleusercontent.com";
-    let pendingRedirectUrl = null;
-    let pendingMeta = null; // {title, source, price}
+let SOURCES=[], RAW=[], DATA=[], VIEW=[], PAGE=1;
+let CALIB = {c_lo:null, c_hi:null}; // loaded from model_artifacts/calibration.json if present
 
-    function parseJwt(token){
-      try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-        return JSON.parse(jsonPayload);
-      } catch { return null; }
+/** ===========================
+ *  AUTH + LOG
+ *  =========================== */
+function openLogin(){ $("loginModal").classList.add("open"); }
+function closeLogin(){ $("loginModal").classList.remove("open"); }
+function parseJwt(token){
+  try{const b64=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    return JSON.parse(decodeURIComponent(atob(b64).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  }catch{return null;}
+}
+function saveUserFromCredential(credential){
+  const claims=parseJwt(credential); if(!claims) return null;
+  const user={name:claims.name||"",email:claims.email||"",picture:claims.picture||"",sub:claims.sub||"",id_token:credential,signed_at:Date.now()};
+  localStorage.setItem("autodeal_user", JSON.stringify(user)); return user;
+}
+function getUser(){ try{return JSON.parse(localStorage.getItem("autodeal_user")||"null");}catch{return null;} }
+function isSignedIn(){ return !!getUser(); }
+function signOut(){ localStorage.removeItem("autodeal_user"); renderAccount(); }
+function renderAccount(){
+  const u=getUser(), area=$("accountArea");
+  if(!u){
+    area.innerHTML = `<button class="pill bg-white/10 border-white/20 text-white hover:bg-white/20" onclick="openLogin()">Se connecter</button>`;
+  }else{
+    area.innerHTML = `<div class="flex items-center gap-2">
+      <img class="avatar" src="${u.picture||''}" alt="avatar" onerror="this.style.display='none'"/>
+      <span class="text-sm font-semibold">${u.name||u.email}</span>
+      <button class="pill bg-white/10 border-white/20 text-white hover:bg-white/20" onclick="signOut()">Se déconnecter</button>
+    </div>`;
+  }
+}
+function logClick({ url, title, source, price }){
+  const u=getUser()||{}; const payload={url,title,source:source||"",price:price||"",email:u.email||"",name:u.name||"",sub:u.sub||"",page:location.href,userAgent:navigator.userAgent,id_token:u.id_token||""};
+  try{
+    const blob=new Blob([JSON.stringify(payload)],{type:'text/plain;charset=UTF-8'});
+    if(navigator.sendBeacon && LOG_ENDPOINT.startsWith('https')){ navigator.sendBeacon(LOG_ENDPOINT, blob); return; }
+  }catch{}
+  fetch(LOG_ENDPOINT,{method:'POST',body:JSON.stringify(payload),keepalive:true}).catch(()=>{});
+}
+window.onloadGisReady = function(){
+  if(!window.google||!google.accounts||!google.accounts.id) return;
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: (resp)=>{ saveUserFromCredential(resp.credential); renderAccount(); closeLogin(); },
+    auto_select:false, cancel_on_tap_outside:true
+  });
+  const btn=$("gsiBtn");
+  if(btn){ google.accounts.id.renderButton(btn,{theme:"outline",size:"large",shape:"pill",text:"continue_with",logo_alignment:"left"}); }
+};
+const gisInterval=setInterval(()=>{ if(window.google&&google.accounts&&google.accounts.id){ clearInterval(gisInterval); window.onloadGisReady(); } },100);
+
+/** ===========================
+ *  ROUTER
+ *  =========================== */
+function setActiveNav(hash){
+  [["navBrowse","#/browse"],["navEstimate","#/estimate"],["navAbout","#/about"]].forEach(([id,route])=>{
+    const el=$(id); if(!el) return; if(hash===route) el.classList.add("active"); else el.classList.remove("active");
+  });
+}
+function showView(id){
+  ["view-browse","view-estimate","view-about"].forEach(v=>{ const el=$(v); if(el) el.classList.add("hidden"); });
+  const el=$(id); if(el) el.classList.remove("hidden");
+}
+function renderSubHeader(hash){
+  const el=$("subHeader");
+  if(hash==="#/browse"){
+    el.innerHTML = `<div class="bg-white/5 rounded-2xl border border-white/10 p-4 backdrop-blur">
+      <div class="flex items-center justify-between gap-3">
+        <div><h2 class="text-lg font-extrabold">Annonces scorées</h2><p class="text-sm text-slate-300">Prix juste (q50) + intervalle (q10–q90) calibrés.</p></div>
+        <a href="#/estimate" class="pill bg-white/10 border border-white/20 text-white hover:bg-white/20">Estimer mon véhicule →</a>
+      </div></div>`;
+  } else if(hash==="#/estimate"){
+    el.innerHTML = `<div class="bg-white/5 rounded-2xl border border-white/10 p-4 backdrop-blur">
+      <h2 class="text-lg font-extrabold">Estimation personnalisée</h2>
+      <p class="text-sm text-slate-300">On applique les mêmes features et règles “non roulante” que dans l’entraînement.</p>
+    </div>`;
+  } else {
+    el.innerHTML = `<div class="bg-white/5 rounded-2xl border border-white/10 p-4 backdrop-blur">
+      <h2 class="text-lg font-extrabold">À propos</h2>
+      <p class="text-sm text-slate-300">Détails du pipeline & limites front-only.</p>
+    </div>`;
+  }
+}
+function router(){
+  const h=location.hash||"#/browse";
+  setActiveNav(h); renderSubHeader(h);
+  if(h==="#/estimate"){ showView("view-estimate"); }
+  else if(h==="#/about"){ showView("view-about"); }
+  else { showView("view-browse"); }
+}
+window.addEventListener("hashchange", router);
+
+/** ===========================
+ *  LOAD MANIFEST + CSV + CALIB
+ *  =========================== */
+function normalizeHeader(h){
+  return String(h||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,"_");
+}
+function parseWithDelimiter(path, delimiter){
+  return new Promise((resolve,reject)=>{
+    Papa.parse(path,{header:true,download:true,skipEmptyLines:true,dynamicTyping:false,delimiter,transformHeader:normalizeHeader,
+      complete:(res)=>resolve(res), error:(e)=>reject(e)});
+  });
+}
+async function loadCSV(path){
+  let out=await new Promise((resolve,reject)=>{
+    Papa.parse(path,{header:true,download:true,skipEmptyLines:true,dynamicTyping:false,transformHeader:normalizeHeader,
+      complete:(res)=>resolve(res), error:(e)=>reject(e)});
+  });
+  const cols=out.meta?.fields?.length||0;
+  if(cols<=1){
+    out=await parseWithDelimiter(path,";");
+    if((out.meta?.fields?.length||0)<=1){ out=await parseWithDelimiter(path,","); }
+  }
+  return out.data;
+}
+async function fetchJSON(url){
+  const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw new Error(`${url} (${r.status})`); return r.json();
+}
+function withBuster(u){ if(!u) return u; const sep=u.includes('?')?'&':'?'; return `${u}${sep}v=${Date.now()}`; }
+
+async function loadManifest(){
+  try{
+    const man = await fetchJSON(withBuster("./manifest.json"));
+    SOURCES = man.sources || [];
+    $("sourceSelect").innerHTML = SOURCES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join("");
+    if(!SOURCES.length){ $("resultInfo").textContent="Aucune source trouvée. Génère manifest.json puis recharge."; return; }
+    $("sourceSelect").value = 0; await loadSelectedSource();
+  }catch(e){ $("resultInfo").textContent = "Impossible de charger manifest.json"; console.error(e); }
+}
+async function loadCalibration(){
+  try{
+    const j = await fetchJSON(withBuster("./model_artifacts/calibration.json"));
+    const c = j?.calibration || j; // au cas où
+    CALIB.c_lo = Number(c?.c_lo) || null;
+    CALIB.c_hi = Number(c?.c_hi) || null;
+  }catch{ CALIB.c_lo = CALIB.c_lo ?? null; CALIB.c_hi = CALIB.c_hi ?? null; }
+}
+
+/** ===========================
+ *  DOMAIN UTILS & ENRICH
+ *  =========================== */
+const SUSPECT_DISCOUNT_PCT = 0.50;
+const NEGATIVE_FLAGS = {
+  has_export:"Export", has_ct_fail:"CT refusé", has_accident:"Accident", has_damage:"Dégâts",
+  has_engine_issue:"Moteur", has_gearbox_issue:"Boîte", has_non_rolling:"Non roulant",
+  has_rust:"Rouille", has_oil_consumption:"Conso huile", has_noise_smoke:"Bruit/Fumée",
+  has_km_not_guaranteed:"KM non garantis", has_for_parts:"Pour pièces",
+  has_insurance_issue:"Assurance", has_airbag_deployed:"Airbag", has_seatbelt_blocked:"Ceinture"
+};
+const POSITIVE_FLAGS = {
+  has_ct_ok:"CT ok", has_carpass:"Carpass", has_maintenance_history:"Entretien suivi",
+  has_first_owner:"1er propriétaire", has_non_smoker:"Non-fumeur", has_warranty:"Garantie",
+  has_no_costs:"Aucun frais", runs_perfect:"Roule bien",
+};
+function toNumberLoose(v){
+  if(v==null||v==="") return null;
+  const s=String(v).replace(/\s/g,"").replace(/\u00A0/g,"").replace(",","."), n=Number(s);
+  return Number.isFinite(n)? n : null;
+}
+function robustMinMax(arr,col,defMin,defMax){
+  const vals=arr.map(r=>+r[col]).filter(Number.isFinite);
+  if(!vals.length) return [defMin,defMax];
+  return [Math.floor(Math.min(...vals)), Math.ceil(Math.max(...vals))];
+}
+function decideRow(row){
+  const dp=row.discount_pct;
+  const hasHuge=(dp!=null && Number.isFinite(+dp) && (+dp)>=SUSPECT_DISCOUNT_PCT);
+  const mlSus = (+row.is_unroadworthy_pred===1) || (Number.isFinite(+row.cond_bad_proba) && (+row.cond_bad_proba)>=0.55) || (String(row.deal_label||"").toLowerCase()==="suspicious");
+  const textCrit = (+row.has_non_rolling===1) || (+row.has_ct_fail===1) || (+row.has_for_parts===1) ||
+    ((+row.has_accident===1) && ((+row.has_engine_issue===1)||(+row.has_gearbox_issue===1)||(+row.has_airbag_deployed===1)));
+  if(mlSus||textCrit||hasHuge) return ["Suspect","red","suspect"];
+  if(dp==null||!Number.isFinite(+dp)) return ["À considérer","gray","fair"];
+  const pct=+dp*100;
+  if(pct>=25) return ["Super affaire","green","super"];
+  if(pct>=10) return ["Bonne affaire","amber","good"];
+  if(pct<-5) return ["Surévaluée","red","over"];
+  return ["Prix correct","gray","fair"];
+}
+function decodeEntities(s){ if(typeof s!=='string') return s; const t=document.createElement("textarea"); t.innerHTML=s; return t.value; }
+function stripQuotes(s){ return s.replace(/^["'\s]+|["'\s]+$/g,""); }
+function unescapeSlashes(s){ return s.replace(/\\\//g,"/").replace(/\\\\/g,"\\").replace(/\\"/g,'"').replace(/\\n/g,' ').replace(/\\r/g,' '); }
+function toList(x){ if(Array.isArray(x)) return x.map(t=>String(t??"").trim()).filter(Boolean);
+  const s=String(x??"").trim(); return s ? (s.includes("|")? s.split("|"): s.includes(";")? s.split(";"):[s]).map(t=>t.trim()).filter(Boolean) : []; }
+
+function getImages(obj){
+  const out=new Set(); const isStr=v=>typeof v==="string"&&v.trim().length>0;
+  const toHttps=u=>u?.startsWith("//")?("https:"+u):u;
+  const cleanUrl=u=>{ if(!isStr(u)) return null; let s=stripQuotes(unescapeSlashes(decodeEntities(u.trim()))); s=toHttps(s);
+    s=s.replace(/^https?:\/\/\/+/, m=>m.replace(/\/+$/,"//")); return s; };
+  const valid=u=>{ if(!isStr(u)) return false; if(/^data:image\//i.test(u)) return true;
+    if(!/^https?:\/\//i.test(u)&&!u.startsWith("//")) return false;
+    return /\.(webp|jpg|jpeg|png|gif)(\?|#|$)/i.test(u) || /\/image(s)?\//i.test(u) || /cdn|media|photos?|thumbnails?/i.test(u); };
+  const tryJSON=s=>{ if(!isStr(s)) return []; const t0=s.trim(), cands=[t0,t0.replace(/'/g,'"'),unescapeSlashes(t0)];
+    for(const t of cands){ if(((t.startsWith("[")&&t.endsWith("]"))||(t.startsWith("{")&&t.endsWith("}")))){ try{const x=JSON.parse(t); return Array.isArray(x)?x:Object.values(x);}catch{}} } return []; };
+  const extractUrls=s=>{ if(!isStr(s)) return []; const urls=[]; const re=/(https?:\/\/[^\s"'<>()]+|\B\/\/[^\s"'<>()]+)/g; let m; while((m=re.exec(s))!==null) urls.push(m[0]);
+    s.split(",").forEach(tok=>{const p=tok.trim().split(/\s+/)[0]; if(/^https?:\/\//.test(p)||p.startsWith("//")) urls.push(p);}); return urls; };
+  const pushAny=v=>{ if(!v) return; if(Array.isArray(v)){v.forEach(pushAny);return;} if(typeof v==="object"){Object.values(v).forEach(pushAny);return;}
+    if(!isStr(v)) return; const parsed=tryJSON(v); if(parsed && parsed.length){ pushAny(parsed); return; }
+    const cleaned=cleanUrl(v); if(valid(cleaned)){ out.add(cleaned); return; }
+    const candidates=(v.includes("|")||v.includes(";")||v.includes(","))?v.split(/[|;,]/):[v];
+    candidates.forEach(c=>extractUrls(c).forEach(u=>{const cu=cleanUrl(u); if(valid(cu)) out.add(cu);})); };
+  const candidates=[obj.images,obj.image_urls,obj.photo_urls,obj.photos,obj.pictures,obj.pics,obj.thumbnails,obj.media,obj.gallery,obj.srcset,obj.src_set,obj.src,obj.cover_url,obj.image,obj.img,obj.img_url,obj.img_urls,obj.first_image_url];
+  for(let i=0;i<25;i++){ candidates.push(obj["image"+i],obj["img"+i],obj["photo"+i],obj["thumb"+i]); }
+  candidates.forEach(pushAny);
+  for(const [k,v] of Object.entries(obj)){ if(!v) continue; const key=k.toLowerCase(); if(/(img|image|photo|pic|thumb|url|media|srcset|src)/.test(key)) pushAny(v); }
+  if(!out.size){ for(const v of Object.values(obj)) if(isStr(v)){ extractUrls(v).forEach(u=>{const cu=cleanUrl(u); if(valid(cu)) out.add(cu); }); } }
+  const final=[]; for(const u of out){ try{ new URL(toHttps(u)); final.push(u);}catch{} }
+  const dedup=Array.from(new Set(final.map(u=>u.replace(/#.*$/,""))));
+  return dedup;
+}
+
+function enrich(rows){
+  return rows.map(r=>{
+    const row={...r};
+    const cols=["url","make","model","year","mileage_km","fuel","transmission","doors","power_kw","power_hp","co2_gkm","seller_rating","price_eur","pred_price_fair","pred_price_lo","pred_price_hi","deal_label","description","engine_liters","euro_norm","body_type","color","options","images","image_urls","photos","pictures","pics","thumbnails","media","gallery","srcset","src_set","src","cover_url","image","img","img_url","img_urls","first_image_url"];
+    cols.forEach(c=>{ if(!(c in row)) row[c]=null; });
+    const num=["year","mileage_km","power_kw","power_hp","co2_gkm","doors","seller_rating","engine_liters","price_eur","pred_price_fair","pred_price_lo","pred_price_hi"];
+    num.forEach(c=>{ row[c]=toNumberLoose(row[c]); });
+
+    // flags existence
+    for(const f of Object.keys(NEGATIVE_FLAGS)){ row[f]=toNumberLoose(row[f])??0; }
+    for(const f of Object.keys(POSITIVE_FLAGS)){ row[f]=toNumberLoose(row[f])??0; }
+
+    const fair=row.pred_price_fair, price=row.price_eur;
+    const disc=(fair && price!=null)?(fair-price):null;
+    row.discount_eur=disc; row.discount_pct=(disc!=null && fair)?(disc/fair):null;
+
+    const [lbl,cls,code]=decideRow(row);
+    row.decision_label=lbl; row.decision_class=cls; row.decision_code=code;
+
+    row.options_list=toList(row.options); row._images=getImages(row); row._img_count=row._images.length;
+    return row;
+  });
+}
+function seedFilterBounds(data){
+  const [pmin,pmax]=robustMinMax(data,"price_eur",0,100000);
+  const [ymin,ymax]=robustMinMax(data,"year",1995,2030);
+  const [kmin,kmax]=robustMinMax(data,"mileage_km",0,600000);
+  $("priceMin").placeholder=pmin; $("priceMax").placeholder=pmax;
+  $("yearMin").placeholder=ymin; $("yearMax").placeholder=ymax;
+  $("kmMin").placeholder=kmin;   $("kmMax").placeholder=kmax;
+}
+
+async function loadSelectedSource(){
+  const idx=+$("sourceSelect").value; const src=SOURCES[idx]; if(!src) return;
+  RAW = await loadCSV(withBuster(src.path));
+  DATA = enrich(RAW);
+  seedFilterBounds(DATA);
+  applyFilters();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/** ===========================
+ *  BROWSE RENDER
+ *  =========================== */
+const PAGE_SIZE=12;
+function badge(label,cls){ return `<span class="badge ${cls}"><span class="dot"></span>${label}</span>`; }
+function tags(row, maxEach=3){
+  const negs=[], poss=[];
+  for(const [k,l] of Object.entries(NEGATIVE_FLAGS)) if(+row[k]===1) negs.push(l);
+  for(const [k,l] of Object.entries(POSITIVE_FLAGS)) if(+row[k]===1) poss.push(l);
+  return [
+    ...negs.slice(0,maxEach).map(t=>`<span class="inline-flex items-center pill bg-white">${t}</span>`),
+    ...poss.slice(0,maxEach).map(t=>`<span class="inline-flex items-center pill" style="background:#f0fdf4;border-color:#bbf7d0">${t}</span>`),
+  ].join("");
+}
+function kpiPairs(row){
+  const prix=fmtEUR(row.price_eur), juste=fmtEUR(row.pred_price_fair);
+  const pct=(row.discount_pct!=null && Number.isFinite(+row.discount_pct))? (row.discount_pct*100).toFixed(1)+"%" : "—";
+  return `<div class="pairs">
+    <div class="kcell"><div class="text-xs text-slate-600 mb-1">Prix affiché</div><div class="text-xl font-extrabold">${prix}</div></div>
+    <div class="kcell"><div class="text-xs text-slate-600 mb-1">Prix juste</div><div class="text-xl font-extrabold">${juste}</div></div>
+    <div class="kcell"><div class="text-xs text-slate-600 mb-1">Remise vs juste</div><div class="text-xl font-extrabold">${pct}</div></div>
+  </div>`;
+}
+function buildDescription(raw, id, limit=120){
+  const s=(raw??"").toString().trim().replace(/https?:\/\/\S+/g,"").replace(/\s+/g," ");
+  if(!s) return "";
+  if(s.length<=limit) return `<p class="text-sm text-slate-700 mt-1">${s}</p>`;
+  let short=s.slice(0,limit).replace(/\s+\S*$/,"");
+  return `<p class="text-sm text-slate-700 mt-1">
+    <span id="${id}-short">${short}…</span>
+    <span id="${id}-full" class="hidden">${s}</span>
+    <button class="text-slate-900 font-semibold underline ml-1" type="button" onclick="toggleDesc('${id}', this)">Voir plus</button>
+  </p>`;
+}
+window.toggleDesc=(id,el)=>{
+  const s=$(`${id}-short`), f=$(`${id}-full`); const expanded=!f.classList.contains('hidden');
+  if(expanded){ f.classList.add('hidden'); s.classList.remove('hidden'); el.textContent='Voir plus'; }
+  else { f.classList.remove('hidden'); s.classList.add('hidden'); el.textContent='Voir moins'; }
+};
+function galleryHTML(imgs=[], gid){
+  const list=Array.from(new Set((imgs||[]).filter(Boolean)));
+  if(!list.length) return `<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 h-52 flex items-center justify-center text-slate-400">Aucune image</div>`;
+  const cover=list[0];
+  return `<div class="space-y-3">
+    <div class="relative w-full">
+      <div class="img-frame"><img id="${gid}_cover" class="img-cover" loading="lazy" referrerpolicy="no-referrer" alt="photo" src="${cover}" onerror="this.closest('.img-frame').innerHTML='';"/></div>
+    </div>
+  </div>`;
+}
+function card(row, idxAbs){
+  const title=[row.make?.toString().trim(), row.model?.toString().trim(), Number.isFinite(+row.year)? String(+row.year):""].filter(Boolean).join(" ")||"Annonce";
+  const dhtml=buildDescription(row.description||"",'desc_'+idxAbs,120);
+  const lo=row.pred_price_lo, hi=row.pred_price_hi, fair=row.pred_price_fair, price=row.price_eur;
+  let expl=""; if(Number.isFinite(+price)&&Number.isFinite(+fair)){
+    expl = `Listé <strong>${fmtEUR(price)}</strong> vs prix juste <strong>${fmtEUR(fair)}</strong>.`;
+    if(Number.isFinite(+lo)&&Number.isFinite(+hi)) expl += ` Intervalle attendu : [${fmtEUR(lo)} – ${fmtEUR(hi)}].`;
+    if(row.discount_pct!=null&&Number.isFinite(+row.discount_pct)){
+      const d=+row.discount_pct*100; expl += d>=0? ` ≈ <strong>${d.toFixed(1)}%</strong> sous le juste prix.` : ` ≈ <strong>${Math.abs(d).toFixed(1)}%</strong> au-dessus.`;
     }
-
-    function saveUserFromCredential(credential){
-      const claims = parseJwt(credential);
-      if (!claims) return null;
-      const user = {
-        name: claims.name || "",
-        email: claims.email || "",
-        picture: claims.picture || "",
-        sub: claims.sub || "",
-        id_token: credential,   // démo front-only
-        signed_at: Date.now()
-      };
-      localStorage.setItem("autodeal_user", JSON.stringify(user));
-      return user;
-    }
-
-    function getUser(){
-      try { return JSON.parse(localStorage.getItem("autodeal_user") || "null"); } catch { return null; }
-    }
-    function isSignedIn(){ return !!getUser(); }
-    function signOut(){
-      localStorage.removeItem("autodeal_user");
-      pendingRedirectUrl = null;
-      pendingMeta = null;
-      renderAccount();
-    }
-
-    function openLogin(){ document.getElementById("loginModal").classList.add("open"); }
-    function closeLogin(){ document.getElementById("loginModal").classList.remove("open"); }
-
-    // ===== Envoi log sans préflight (sendBeacon si possible) =====
-    function logClick({ url, title, source, price }) {
-      const u = getUser() || {};
-      const payload = {
-        url, title,
-        source: source || "",
-        price: price || "",
-        email: u.email || "",
-        name:  u.name  || "",
-        sub:   u.sub   || "",
-        page: location.href,
-        userAgent: navigator.userAgent,
-        id_token: u.id_token || ""
-      };
-
-      try {
-        const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=UTF-8' });
-        if (navigator.sendBeacon && LOG_ENDPOINT.startsWith('https')) {
-          navigator.sendBeacon(LOG_ENDPOINT, blob);
-          return;
-        }
-      } catch {}
-
-      // Fallback fetch – pas de headers -> évite le préflight
-      fetch(LOG_ENDPOINT, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        keepalive: true
-      }).catch(()=>{});
-    }
-
-    // Init GIS + bouton
-    window.onloadGisReady = function(){
-      if (!window.google || !google.accounts || !google.accounts.id) return;
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response)=>{
-          saveUserFromCredential(response.credential);
-          renderAccount();
-          closeLogin();
-
-          // Si on venait d'un clic
-          if (pendingRedirectUrl){
-            const url = pendingRedirectUrl;
-            const meta = pendingMeta || {};
-            pendingRedirectUrl = null;
-            pendingMeta = null;
-
-            // log maintenant que l'on est authentifié
-            logClick({ url, title: meta.title || "", source: meta.source || "", price: meta.price || "" });
-            window.open(url, "_blank", "noopener");
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true
-      });
-
-      const btn = document.getElementById("gsiBtn");
-      if (btn) {
-        google.accounts.id.renderButton(btn, {
-          theme: "outline",
-          size: "large",
-          shape: "pill",
-          text: "continue_with",
-          logo_alignment: "left"
-        });
+  }
+  const url=(row.url??"").toString(); const imgs=row._images||[]; const gid="g_"+idxAbs;
+  const srcLabel=(function(){const el=$("sourceSelect"); const i=el?el.selectedIndex:-1; return i>=0?(el.options[i].text||''):'';})();
+  const esc=s=>String(s||'').replace(/'/g,"&#39;");
+  return `<article class="card p-5">
+    <div class="flex items-start justify-between gap-2 mb-4">
+      <div><h3 class="text-xl font-extrabold tracking-tight">${title}</h3>${dhtml}</div>
+      ${badge(row.decision_label,row.decision_class)}
+    </div>
+    ${galleryHTML(imgs,gid)}
+    <div class="mt-6 space-y-5">
+      ${kpiPairs(row)}
+      ${infoGrid(row)}
+      ${expl?`<p class="text-sm">${expl}</p>`:``}
+      ${tags(row)?`<div class="mt-1 flex flex-wrap gap-2">${tags(row)}</div>`:``}
+      ${
+        url && url.startsWith("http") ? `<div class="pt-2">
+          <button class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white font-extrabold hover:bg-slate-50"
+            onclick="if(${isSignedIn()}){logClick({url:'${esc(url)}',title:'${esc(title)}',source:'${esc(srcLabel)}',price:'${Number.isFinite(+row.price_eur)? String(row.price_eur):''}'}); window.open('${esc(url)}','_blank','noopener'); } else { openLogin(); }">
+            Voir l’annonce
+          </button></div>` : ``
       }
-      // google.accounts.id.prompt(); // (optionnel) One Tap
-    };
+    </div></article>`;
+}
+function infoGrid(row){
+  const km=safeInt(row.mileage_km), cyl=Number.isFinite(+row.engine_liters)?`${(+row.engine_liters).toFixed(1)} L`:"";
+  const carb=row.fuel??"", trans=row.transmission??"", euro=row.euro_norm??"", co2=safeInt(row.co2_gkm), doors=safeInt(row.doors);
+  const body=(row.body_type??"")||(row.color??"");
+  const cells=[]; if(km)cells.push(["Kilométrage",km]); if(cyl)cells.push(["Cylindrée",cyl]); if(carb)cells.push(["Carburant",carb]);
+  if(trans)cells.push(["Transmission",trans]); if(euro)cells.push(["Euronorm",euro]); if(co2)cells.push(["CO₂ (g/km)",co2]); if(doors)cells.push(["Portes",doors]); if(body)cells.push(["Carrosserie/Couleur",body]);
+  if(!cells.length) return ""; return `<div class="grid-3x3">${cells.map(([l,v])=>`<div class="kcell bg-white"><div class="text-xs text-slate-600 mb-1">${l}</div><div class="font-extrabold">${v}</div></div>`).join("")}</div>`;
+}
+function currentFilters(){
+  return {
+    priceMin:+$("priceMin").value || -Infinity, priceMax:+$("priceMax").value || +Infinity,
+    kmMin:+$("kmMin").value || -Infinity, kmMax:+$("kmMax").value || +Infinity,
+    yearMin:+$("yearMin").value || -Infinity, yearMax:+$("yearMax").value || +Infinity,
+    sort:$("sortSelect").value, asc:$("orderSelect").value==="asc", types:selectedDealTypes(),
+  };
+}
+function selectedDealTypes(){
+  return new Set([
+    $("tSuper")?.checked && "super", $("tGood")?.checked && "good", $("tFair")?.checked && "fair",
+    $("tOver")?.checked && "over", $("tSuspect")?.checked && "suspect",
+  ].filter(Boolean));
+}
+function resetFilters(){
+  ["priceMin","priceMax","kmMin","kmMax","yearMin","yearMax"].forEach(id=>{ $(id).value=""; });
+  $("sortSelect").value="Remise (%)"; $("orderSelect").value="desc";
+  if($("tSuper"))$("tSuper").checked=true; if($("tGood"))$("tGood").checked=true; if($("tFair"))$("tFair").checked=true; if($("tOver"))$("tOver").checked=true; if($("tSuspect"))$("tSuspect").checked=false;
+  applyFilters();
+}
+function applyFilters(){
+  const f=currentFilters();
+  let d=DATA.filter(r=>{
+    const p=+r.price_eur, y=+r.year, k=+r.mileage_km;
+    const okP=Number.isFinite(p)?(p>=f.priceMin && p<=f.priceMax):true;
+    const okY=Number.isFinite(y)?(y>=f.yearMin && y<=f.yearMax):true;
+    const okK=Number.isFinite(k)?(k>=f.kmMin && k<=f.kmMax):true;
+    const okT=f.types.has(r.decision_code||"");
+    return okP && okY && okK && okT;
+  });
+  let col="discount_pct";
+  if(f.sort==="Remise (€)") col="discount_eur";
+  else if(f.sort==="Prix (€)") col="price_eur";
+  else if(f.sort==="Année") col="year";
+  else if(f.sort==="Kilométrage") col="mileage_km";
+  else if(f.sort==="Prix juste (€)") col="pred_price_fair";
+  d.sort((a,b)=>{
+    const A=(a[col]??Number.NEGATIVE_INFINITY), B=(b[col]??Number.NEGATIVE_INFINITY);
+    if(!Number.isFinite(A)&&!Number.isFinite(B)) return 0; if(!Number.isFinite(A)) return 1; if(!Number.isFinite(B)) return -1;
+    return f.asc? (A-B):(B-A);
+  });
+  VIEW=d; PAGE=1; renderBrowse();
+}
+function renderBrowse(){
+  $("resultInfo").textContent = `${VIEW.length} annonce(s) trouvée(s)`;
+  const total=VIEW.length, totalPages=Math.max(1, Math.ceil(total/PAGE_SIZE));
+  PAGE=Math.min(Math.max(1,PAGE), totalPages);
+  const start=(PAGE-1)*PAGE_SIZE, slice=VIEW.slice(start,start+PAGE_SIZE);
+  $("cards").innerHTML = slice.map((row,i)=>card(row,start+i)).join("");
+  $("prevBtn").disabled = PAGE<=1; $("nextBtn").disabled = PAGE>=totalPages;
+  $("pageInfo").textContent = `Page ${PAGE} / ${totalPages}`;
+}
+$("prevBtn")?.addEventListener("click",()=>{ PAGE=Math.max(1,PAGE-1); renderBrowse(); });
+$("nextBtn")?.addEventListener("click",()=>{ PAGE+=1; renderBrowse(); });
+$("resetBtn")?.addEventListener("click", resetFilters);
+$("sortSelect")?.addEventListener("change", applyFilters);
+$("orderSelect")?.addEventListener("change", applyFilters);
+["priceMin","priceMax","kmMin","kmMax","yearMin","yearMax"].forEach(id=> $(id)?.addEventListener("input", applyFilters));
+$("sourceSelect")?.addEventListener("change", async()=>{ await loadSelectedSource(); });
 
-    const gisInterval = setInterval(()=>{
-      if (window.google && google.accounts && google.accounts.id){
-        clearInterval(gisInterval);
-        window.onloadGisReady();
-      }
-    }, 100);
+/** ===========================
+ *  ESTIMATION (front-only) — fidèle au pipeline
+ *  =========================== */
+function normText(s){ return (s??"").toString().trim().toLowerCase(); }
+function closeModel(a,b){ if(!a||!b) return false; a=normText(a); b=normText(b); return a===b || a.startsWith(b) || b.startsWith(a); }
+function penaltyEq(a,b,pen){ a=normText(a); b=normText(b); if(!a||!b) return 0; return a===b? 0 : pen; }
+function numDiff(qv, rv, scale, missPenalty=0.2){
+  const a=Number.isFinite(qv)?qv:null, b=Number.isFinite(+rv)?+rv:null;
+  if(a==null||b==null) return missPenalty;
+  return Math.abs(a-b)/scale;
+}
 
-    function renderAccount(){
-      const area = document.getElementById("accountArea");
-      const u = getUser();
-      if (!u){
-        area.innerHTML = `
-          <button class="pill bg-white/10 border-white/20 text-white hover:bg-white/20"
-                  onclick="openLogin()">Se connecter</button>
-        `;
-      } else {
-        area.innerHTML = `
-          <div class="flex items-center gap-2">
-            <img class="avatar" src="${u.picture||''}" alt="avatar" onerror="this.style.display='none'"/>
-            <span class="text-sm font-semibold">${u.name || u.email}</span>
-            <button class="pill bg-white/10 border-white/20 text-white hover:bg-white/20" onclick="signOut()">Se déconnecter</button>
-          </div>
-        `;
-      }
-    }
+// Flags description (extraits du pipeline)
+const DESC_NEG = {
+  has_export: /\b(export|voor\s+export|alleen\s+export|exportvoertuig|destin[ée]e?\s+à\s+l'?export)\b/i,
+  has_ct_fail: /((contr[ôo]?le?\s*techn[iy]q?u?e|techinque|keuring).{0,60}\b(refus[ée]s?|rejet[ée]?|afgekeurd|herkeuring|rode?\s*kaart))|(\bne\s*(passe|passera)\s*pas\s*le\s*(contr[ôo]?le?\s*techn[iy]q?u?e|techinque)\b)|(\bkeuring\b.{0,20}\b(niet\s*ok|afgekeurd)\b)/i,
+  has_accident: /\b(accident[ée]s?|sinistr[ée]s?|choc|impact)\b|(\bongeval\b|\bbotsing\b|\baanrijding\b)/i,
+  has_damage: /\b(cass[ée]e?s?|cassure?s?|griffes?|rayures?|éraflures?|bosses?|deuk(en)?|schade|krassen?)\b|(\b(avant|arrière|côté|portière|pare[-\s]?chocs?)\b.{0,12}\b(accident[ée]?|endommag[ée]?|pli[ée]?|tordu[es]?)\b)/i,
+  has_engine_issue: /(moteur|motor).{0,40}\b(hs|panne|defect|defekt|kapot|à\s*remplacer|serré|blown)\b/i,
+  has_gearbox_issue: /(bo[iî]te(\s*de\s*vitesses)?|versnellingsbak|boite).{0,40}\b(hs|panne|defect|kapot|cass[ée]e?|à\s*remplacer)\b/i,
+  has_non_rolling: /\b(non\s*roulant|ne\s*roule\s*pas|non\s*startant|ne\s*d[ée]marre\s*pas)\b|(\bniet\s*rijdend\b|\bstart\s*niet\b)/i,
+  has_rust: /\b(rouille|roest)\b/i,
+  has_oil_consumption: /(consommation\s+d['’]huile|olieverbruik)\b/i,
+  has_noise_smoke: /\b(fum[ée]e?s?|rook|bruit|geluid|tikte?n?)\b/i,
+  has_km_not_guaranteed: /(kilom[ée]trage\s*non\s*garanti|km-?stand\s*niet\s*gegarandeerd)/i,
+  has_insurance_issue: /(pas|non)\s*d[ée]clar[ée]e?\s*(à|a)\s*l'?assurance|\bniet\s*aangegeven\s*bij\s*de\s*verzekering\b|\bnot\s*declared\s*to\s*insurance\b/i,
+  has_airbag_deployed: /\b(airbags?\s*(sorti|d[ée]ploy[ée]s?)|airbag\s*(uit|afgegaan))\b/i,
+  has_seatbelt_blocked: /\b(ceintures?\s*(bloqu[ée]e?s?)|gordel\s*(geblokkeerd|vast))\b/i,
+  has_for_parts: /\b(pour[\s-]*pi[eè]ce?s?|pour[\s-]*pieces?|spare[\s-]*parts?|for[\s-]*parts?|voor[\s-]*onderdelen?)\b/i,
+};
+const DESC_POS = {
+  has_ct_ok: /(contr[ôo]le?\s+technique|keuring).{0,40}\b(ok|valide|goedgekeurd)/i,
+  has_carpass: /\bcarpass\b/i,
+  has_maintenance_history: /(entretien|onderhoud|carnet|factures?)/i,
+  has_first_owner: /(premi[èe]re?\s+main|eerste\s+eigenaar)/i,
+  has_non_smoker: /(non[-\s]?fumeur|rookvrij)/i,
+  has_warranty: /(garantie|waarborg)\b/i,
+  has_no_costs: /(aucun\s+frais\s+[àa]\s+pr[ée]voir|zonder\s+kosten|nothing\s+to\s+do)/i,
+  runs_perfect: /(roule|rijdt).{0,20}(parfait|perfect)/i,
+};
+const HARD_NEG_RE = new RegExp([
+  /\b(non\s*roulant|ne\s*roule\s*pas|non\s*startant|ne\s*d[ée]marre\s*pas)\b/.source,
+  /\b(niet\s*rijdend|start\s*niet)\b/.source,
+  /\b(pour[\s-]*pi[eè]ce?s?|pour[\s-]*pieces?|spare[\s-]*parts?|for[\s-]*parts?|voor[\s-]*onderdelen?)\b/.source,
+  /(moteur|motor).{0,30}\b(hs|dead|defect|defekt|kapot|à\s*remplacer|serr[ée]?)\b/.source,
+  /(bo[iî]te(\s*de\s*vitesses)?|versnellingsbak|boite).{0,30}\b(hs|cass[ée]e?|kapot|defect|à\s*remplacer)\b/.source,
+  /((contr[ôo]?le?\s*techn[iy]q?u?e|techinque|keuring).{0,40}\b(refus[ée]s?|rejet[ée]?|afgekeurd|rode?\s*kaart))|(\bne\s*(passe|passera)\s*pas\s*le\s*(contr[ôo]?le?\s*techn[iy]q?u?e|techinque)\b)|(\bkeuring\b.{0,20}\b(niet\s*ok|afgekeurd)\b)/.source,
+  /\b(accident[ée]s?|sinistr[ée]s?|ongeval|botsing|aanrijding)\b/.source,
+  /(pas|non)\s*d[ée]clar[ée]e?\s*(à|a)\s*l'?assurance|\bnot\s*declared\s*to\s*insurance\b|\bniet\s*aangegeven\s*bij\s*de\s*verzekering\b/.source,
+  /\b(airbags?\s*(sorti|d[ée]ploy[ée]s?)|airbag\s*(uit|afgegaan))\b/.source,
+  /\b(ceintures?\s*(bloqu[ée]e?s?)|gordel\s*(geblokkeerd|vast))\b/.source
+].join("|"), "i");
 
-    // Libellé de la source sélectionnée (pour logger)
-    function currentSourceLabel() {
-      const el = document.getElementById("sourceSelect");
-      if (!el) return "";
-      const i = el.selectedIndex;
-      return i >= 0 ? (el.options[i].text || "") : "";
-    }
+function descFlags(text){
+  const t=(text||"").toString().toLowerCase().replace(/http[s]?:\/\/\S+|www\.\S+/g," ").replace(/\+?\d[\d\s\-]{6,}/g," ").replace(/\s+/g," ").trim();
+  const out={};
+  Object.keys(DESC_NEG).forEach(k=> out[k]=DESC_NEG[k].test(t)?1:0);
+  Object.keys(DESC_POS).forEach(k=> out[k]=DESC_POS[k].test(t)?1:0);
+  out["cond_pos"] = Object.keys(DESC_POS).reduce((s,k)=>s+(out[k]?1:0),0);
+  out["cond_neg"] = Object.keys(DESC_NEG).reduce((s,k)=>s+(out[k]?1:0),0);
+  out["cond_score"] = out["cond_pos"] - 2*out["cond_neg"];
+  out["desc_len"] = t.length;
+  return out;
+}
+function weakLabelUnroadworthy(row){
+  const hard = HARD_NEG_RE.test((row.desc_text||""));
+  const many_neg = (row.cond_neg||0) >= 2;
+  const very_bad = (row.cond_score||0) <= -2.0;
+  const engine_or_gear = (+row.has_engine_issue===1) || (+row.has_gearbox_issue===1);
+  const non_rolling = (+row.has_non_rolling===1);
+  const ct_fail = (+row.has_ct_fail===1);
+  const accident = (+row.has_accident===1);
+  const insurance = (+row.has_insurance_issue===1);
+  const airbag = (+row.has_airbag_deployed===1);
+  const belt = (+row.has_seatbelt_blocked===1);
+  const for_parts = (+row.has_for_parts===1);
+  if(hard||non_rolling||ct_fail||for_parts) return 1;
+  if(accident && (airbag||belt||engine_or_gear)) return 1;
+  if(insurance && accident) return 1;
+  if(engine_or_gear && (many_neg||very_bad)) return 1;
+  return 0;
+}
 
-    // Empêche d'ouvrir une annonce si non connecté + log
-    function goToAd(url, title, source, price){
-      if (isSignedIn()){
-        logClick({ url, title, source, price });
-        window.open(url, "_blank", "noopener");
-      } else {
-        pendingRedirectUrl = url;
-        pendingMeta = { title, source, price };
-        openLogin();
-      }
-    }
+function weightedQuantile(values, weights, q){
+  const arr = values.map((v,i)=>({v:+v, w:Math.max(0, +weights[i]||0)})).filter(o=>Number.isFinite(o.v)&&o.w>0);
+  if(!arr.length) return null; arr.sort((a,b)=>a.v-b.v);
+  const tot=arr.reduce((s,o)=>s+o.w,0); let cum=0, target=q*tot;
+  for(const o of arr){ cum+=o.w; if(cum>=target) return o.v; } return arr[arr.length-1].v;
+}
+function euclidLikeDist(q, r){
+  // numeric (scaled)
+  const dy  = numDiff(q.year, r.year, 10, 0.25);
+  const dkm = numDiff(q.km, r.mileage_km, 200000, 0.30);
+  const dhp = numDiff(q.hp, r.power_hp, 100, 0.18);
+  const dkw = numDiff(q.kw, r.power_kw, 75, 0.18);
+  const dco2= numDiff(q.co2, r.co2_gkm, 200, 0.10);
+  const dcons=numDiff(q.cons, r.consumption_l_100, 6, 0.10);
+  const dlit=numDiff(q.liters, r.engine_liters, 1.5, 0.12);
+  const ddoors=numDiff(q.doors, r.doors, 3, 0.10);
+  // euro norm diff
+  const deuro=(()=>{
+    const qe=(q.euro||"").match(/\d+/), re=(r.euro_norm||"").toString().match(/\d+/);
+    if(!qe||!re) return 0.10; return Math.abs(parseInt(qe[0]) - parseInt(re[0]))/3;
+  })();
+  // categorical penalties
+  const pfuel = penaltyEq(q.fuel, r.fuel, 0.25);
+  const ptrans= penaltyEq(q.trans, r.transmission, 0.20);
+  const pbody = penaltyEq(q.body, r.body_type, 0.20);
+  const pcolor= penaltyEq(q.color, r.color, 0.10);
+  const pmake = penaltyEq(q.make, r.make, 0.90);
+  const pmodel = (closeModel(q.model, r.model)? -0.08 : 0.12);
+  // extra: age/km per year coherence if available
+  const day = Number.isFinite(q.year)&&Number.isFinite(+r.year)? Math.abs((new Date().getFullYear()-q.year) - (new Date().getFullYear()-(+r.year)))/10 : 0;
+  const base = dy+dkm+dhp+dkw+dco2+dcons+dlit+ddoors+deuro+pfuel+ptrans+pbody+pcolor+pmake+pmodel+day;
+  return Math.max(0, base);
+}
+function knnEstimate(query, k=40){
+  if(!Array.isArray(DATA)||!DATA.length) return null;
+  // prefilter: same make prefer, or close model
+  let cand = DATA.filter(r => normText(r.make)===normText(query.make));
+  if(cand.length<k) cand = DATA.filter(r => normText(r.make)===normText(query.make) || closeModel(query.model, r.model));
+  if(cand.length<Math.max(10,k)) cand = DATA.slice();
 
-    // ================== Constantes domain ==================
-    // Seuils "suspect"
-    const SUSPECT_DISCOUNT_PCT = 0.50;   // ≥ 50% de remise => suspect
-    const SUSPECT_PROBA        = 0.55;   // cond_bad_proba ≥ 0.55 => suspect
+  // compute flags on cand already present; we just need price proxies
+  const scored = cand.map(r=>{
+    const d=euclidLikeDist(query, r);
+    // use fair if available else price
+    const fair = Number.isFinite(+r.pred_price_fair)? +r.pred_price_fair : (Number.isFinite(+r.price_eur)? +r.price_eur : null);
+    const lo = Number.isFinite(+r.pred_price_lo)? +r.pred_price_lo : null;
+    const hi = Number.isFinite(+r.pred_price_hi)? +r.pred_price_hi : null;
+    return {r,d,fair,lo,hi};
+  }).filter(x=>x.fair!=null);
+  if(!scored.length) return null;
 
-    const NEGATIVE_FLAGS = {
-      has_export:"Export",
-      has_ct_fail:"CT refusé",
-      has_accident:"Accident",
-      has_damage:"Dégâts",
-      has_engine_issue:"Moteur",
-      has_gearbox_issue:"Boîte",
-      has_non_rolling:"Non roulant",
-      has_rust:"Rouille",
-      has_oil_consumption:"Conso huile",
-      has_noise_smoke:"Bruit/Fumée",
-      has_km_not_guaranteed:"KM non garantis",
-      // Nouveaux si présents dans le CSV
-      has_for_parts:"Pour pièces",
-      has_insurance_issue:"Assurance",
-      has_airbag_deployed:"Airbag",
-      has_seatbelt_blocked:"Ceinture"
-    };
+  scored.sort((a,b)=>a.d-b.d);
+  const nb=Math.min(k, scored.length), neigh=scored.slice(0,nb);
+  const eps=1e-3, weights=neigh.map(n=>1/Math.max(eps, Math.min(2.5, n.d)));
 
-    const POSITIVE_FLAGS = {
-      has_ct_ok:"CT ok",has_carpass:"Carpass",has_maintenance_history:"Entretien suivi",
-      has_first_owner:"1er propriétaire",has_non_smoker:"Non-fumeur",has_warranty:"Garantie",
-      has_no_costs:"Aucun frais",runs_perfect:"Roule bien",
-    };
-    const PAGE_SIZE = 12;
+  const valsFair=neigh.map(n=>n.fair);
+  const valsLo=neigh.map(n=>n.lo ?? n.fair*0.9);
+  const valsHi=neigh.map(n=>n.hi ?? n.fair*1.1);
 
-    // ================== Utils ==================
-    const $ = (id)=>document.getElementById(id);
-    const money = (v)=> Number.isFinite(+v)? (+v).toLocaleString("fr-FR",{maximumFractionDigits:0})+" €" : "—";
-    const safeInt = (v)=> Number.isFinite(+v)? (+v).toLocaleString("fr-FR") : "";
-    const cleanDesc = (s, max=420)=> {
-      s=(s??"").toString().trim().replace(/https?:\/\/\S+/g,"").replace(/\s+/g," ");
-      return s.length>max ? s.slice(0,max)+"…" : s;
-    };
-    const toList = (x)=>{
-      if (Array.isArray(x)) return x.map(t=>String(t??"").trim()).filter(Boolean);
-      const s=String(x??"").trim();
-      return s ? (s.includes("|")? s.split("|"): s.includes(";")? s.split(";"):[s]).map(t=>t.trim()).filter(Boolean) : [];
-    };
-    const decodeEntities = (s)=>{
-      if (typeof s!=='string') return s;
-      const txt = document.createElement("textarea");
-      txt.innerHTML = s;
-      return txt.value;
-    };
-    const stripQuotes = (s)=> s.replace(/^["'\s]+|["'\s]+$/g, "");
-    const unescapeSlashes = (s)=> s.replace(/\\\//g,"/").replace(/\\\\/g,"\\").replace(/\\"/g,'"').replace(/\\n/g,' ').replace(/\\r/g,' ');
-    function withBuster(u){
-      if (!u) return u;
-      const sep = u.includes('?') ? '&' : '?';
-      return `${u}${sep}v=${Date.now()}`;
-    }
+  const fair = weightedQuantile(valsFair, weights, 0.5);
+  const p10  = weightedQuantile(valsFair, weights, 0.1);
+  const p90  = weightedQuantile(valsFair, weights, 0.9);
 
-    function normalizeHeader(h){
-      return String(h||"").trim().toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-        .replace(/\s+/g,"_");
-    }
-    function toNumberLoose(v){
-      if (v==null || v==="") return null;
-      const s = String(v).replace(/\s/g,"").replace(/\u00A0/g,"").replace(",",".");
-      const n = Number(s);
-      return Number.isFinite(n) ? n : null;
-    }
+  const lo = (valsLo.filter(v=>v!=null).length >= Math.ceil(nb*0.6)) ? weightedQuantile(valsLo, weights, 0.5) : p10;
+  const hi = (valsHi.filter(v=>v!=null).length >= Math.ceil(nb*0.6)) ? weightedQuantile(valsHi, weights, 0.5) : p90;
 
-    // ===== Description "voir plus" (120) =====
-    function buildDescription(raw, id, limit = 120){
-      const s = (raw ?? "").toString().trim()
-        .replace(/https?:\/\/\S+/g, "")
-        .replace(/\s+/g, " ");
-      if (!s) return "";
-      if (s.length <= limit) return `<p class="text-sm text-slate-700 mt-1">${s}</p>`;
-      let short = s.slice(0, limit).replace(/\s+\S*$/, "");
-      return `
-        <p class="text-sm text-slate-700 mt-1">
-          <span id="${id}-short">${short}…</span>
-          <span id="${id}-full" class="hidden">${s}</span>
-          <button class="text-slate-900 font-semibold underline ml-1" type="button"
-                  onclick="toggleDesc('${id}', this)">Voir plus</button>
-        </p>`;
-    }
-    window.toggleDesc = (id, el) => {
-      const shortEl = document.getElementById(id + '-short');
-      const fullEl  = document.getElementById(id + '-full');
-      const expanded = !fullEl.classList.contains('hidden');
-      if (expanded) { fullEl.classList.add('hidden'); shortEl.classList.remove('hidden'); el.textContent = 'Voir plus'; }
-      else { fullEl.classList.remove('hidden'); shortEl.classList.add('hidden'); el.textContent = 'Voir moins'; }
-    };
+  // conformal calibration (absolute euros) if provided by training artifacts
+  let loCal = lo, hiCal = hi;
+  if(Number.isFinite(CALIB.c_lo) && Number.isFinite(CALIB.c_hi) && Number.isFinite(fair)){
+    loCal = Math.max(0, fair - CALIB.c_lo);
+    hiCal = fair + CALIB.c_hi;
+  }
 
-    // ================== Images (ultra robuste) ==================
-    function mapViaProxy(u){
-      if (!IMG_PROXY_BASE) return u;
-      try { return IMG_PROXY_BASE + encodeURIComponent(u); } catch { return u; }
-    }
-    function getImages(obj){
-      const out = new Set();
-      const isStr = v => typeof v === "string" && v.trim().length > 0;
-      const toHttps = u => u?.startsWith("//") ? ("https:" + u) : u;
-      const cleanUrl = (u) => {
-        if (!isStr(u)) return null;
-        let s = stripQuotes(unescapeSlashes(decodeEntities(u.trim())));
-        s = toHttps(s);
-        s = s.replace(/^https?:\/\/\/+/, m => m.replace(/\/+$/, "//"));
-        return s;
-      };
-      const validImageLike = (u) => {
-        if (!isStr(u)) return false;
-        if (/^data:image\//i.test(u)) return true;
-        if (!/^https?:\/\//i.test(u) && !u.startsWith("//")) return false;
-        return /\.(webp|jpg|jpeg|png|gif)(\?|#|$)/i.test(u)
-               || /\/image(s)?\//i.test(u) || /cdn|media|photos?|thumbnails?/i.test(u);
-      };
-      const tryJSON = (s) => {
-        if (!isStr(s)) return [];
-        const t0 = s.trim();
-        const candidates = [t0, t0.replace(/'/g,'"'), unescapeSlashes(t0)];
-        for (const t of candidates){
-          if (!((t.startsWith("[") && t.endsWith("]")) || (t.startsWith("{") && t.endsWith("}")))) continue;
-          try { const x=JSON.parse(t); return Array.isArray(x)? x : Object.values(x); } catch{}
-        }
-        return [];
-      };
-      const extractUrls = (s) => {
-        if (!isStr(s)) return [];
-        const urls = [];
-        const re = /(https?:\/\/[^\s"'<>()]+|\B\/\/[^\s"'<>()]+)/g;
-        let m; while ((m = re.exec(s)) !== null) urls.push(m[0]);
-        s.split(",").forEach(tok=>{
-          const p = tok.trim().split(/\s+/)[0];
-          if (/^https?:\/\//.test(p) || p.startsWith("//")) urls.push(p);
-        });
-        return urls;
-      };
-      const pushAny = (v) => {
-        if (!v) return;
-        if (Array.isArray(v)) { v.forEach(it => pushAny(it)); return; }
-        if (typeof v === "object") { Object.values(v).forEach(pushAny); return; }
-        if (!isStr(v)) return;
-        const parsed = tryJSON(v); if (parsed && parsed.length) { pushAny(parsed); return; }
-        const cleaned = cleanUrl(v);
-        if (validImageLike(cleaned)) { out.add(cleaned); return; }
-        const candidates = (v.includes("|") || v.includes(";") || v.includes(",")) ? v.split(/[|;,]/) : [v];
-        candidates.forEach(c => extractUrls(c).forEach(u => {
-          const cu = cleanUrl(u); if (validImageLike(cu)) out.add(cu);
-        }));
-      };
-      const candidates = [
-        obj.images,obj.image_urls,obj.photo_urls,obj.photos,obj.pictures,obj.pics,obj.thumbnails,
-        obj.media,obj.gallery,obj.srcset,obj.src_set,obj.src,obj.cover,obj.cover_url,obj.first_image_url,
-        obj.image,obj.img,obj.img_url,obj.img_urls
-      ];
-      for (let i=0;i<25;i++){ candidates.push(obj["image"+i], obj["img"+i], obj["photo"+i], obj["thumb"+i]); }
-      candidates.forEach(v => pushAny(v));
-      for (const [k, v] of Object.entries(obj)) {
-        if (!v) continue; const key = k.toLowerCase();
-        if (/(img|image|photo|pic|thumb|url|media|srcset|src)/.test(key)) pushAny(v);
-      }
-      if (!out.size) {
-        for (const v of Object.values(obj)) if (isStr(v)) {
-          extractUrls(v).forEach(u => { const cu=cleanUrl(u); if (validImageLike(cu)) out.add(cu); });
-        }
-      }
-      const final = []; for (const u of out) { try { new URL(toHttps(u)); final.push(u); } catch{} }
-      const dedup = Array.from(new Set(final.map(u => u.replace(/#.*$/, ""))));
-      return dedup.map(mapViaProxy);
-    }
+  const conf = (fair && loCal && hiCal)? Math.max(0, Math.min(1, 1 - ((hiCal-loCal)/Math.max(1000, fair*1.8)))) : 0.4;
 
-    window.__imgFallback = function(el){
-      if (!el || !el.src) return;
-      const tried = el.getAttribute("data-tries")|0;
-      if (tried === 0) {
-        el.setAttribute("data-tries","1");
-        const noQuery = el.src.replace(/\?.*$/, "");
-        if (noQuery !== el.src) { el.src = noQuery; return; }
-      }
-      if (tried <= 1) {
-        el.setAttribute("data-tries","2");
-        if (el.src.startsWith("//")) { el.src = "https:" + el.src; return; }
-        if (el.src.startsWith("http://")) { el.src = el.src.replace(/^http:\/\//,"https://"); return; }
-      }
-      if (el.classList.contains("thumb")) { el.style.display = "none"; }
-      else { const wrapper = el.closest(".img-skeleton"); if (wrapper) wrapper.classList.add("img-skeleton"); el.alt = "Image indisponible"; }
-    };
+  return {fair, lo:loCal, hi:hiCal, k_used:nb, conf, neighbours:neigh};
+}
 
-    // ================== Décision deal (FR) ==================
-    function decideRow(row){
-      const dp = row.discount_pct; // proportion: 0.70 => 70%
-      const hasHugeDiscount = (dp!=null && Number.isFinite(+dp) && (+dp)>=SUSPECT_DISCOUNT_PCT);
+function readQueryFromForm(){
+  return {
+    make: $("qMake").value, model:$("qModel").value,
+    year: +$("qYear").value || null, km: +$("qKm").value || null,
+    fuel:$("qFuel").value, trans:$("qTrans").value,
+    hp:+$("qHp").value || null, liters:+$("qLiters").value || null,
+    euro:$("qEuro").value, co2:+$("qCO2").value || null, cons:+$("qCons").value || null,
+    doors:+$("qDoors").value || null, body:$("qBody").value, color:$("qColor").value,
+    options_text: $("qOptions").value, desc_text: $("qDesc").value, kw:null,
+  };
+}
+function estimateHandler(){
+  const q=readQueryFromForm();
+  const flags=descFlags(q.desc_text||"");
+  const weakRow={...flags, desc_text:q.desc_text||""};
+  const isNonR = weakLabelUnroadworthy(weakRow)===1;
+  const out=$("estOut");
 
-      const mlSuspect =
-        (+row.is_unroadworthy_pred === 1) ||
-        (Number.isFinite(+row.cond_bad_proba) && (+row.cond_bad_proba) >= SUSPECT_PROBA) ||
-        (String(row.deal_label||"").toLowerCase() === "suspicious");
+  if(isNonR){
+    out.innerHTML = `<div class="card p-4">
+      <div class="text-rose-600 font-extrabold">Véhicule détecté “non roulant / à problème”</div>
+      <p class="text-sm mt-1 text-slate-700">Le pipeline exclut ces cas de l’entraînement/pricing. Retire les éléments “pour pièces”, “CT refusé”, “moteur/boîte HS”… si c’est une erreur.</p>
+    </div>`;
+    return;
+  }
 
-      const textCritical =
-        (+row.has_non_rolling===1) || (+row.has_ct_fail===1) || (+row.has_for_parts===1) ||
-        ( (+row.has_accident===1) && ( (+row.has_engine_issue===1) || (+row.has_gearbox_issue===1) || (+row.has_airbag_deployed===1) ) );
+  if(!Array.isArray(DATA)||!DATA.length){
+    out.innerHTML = `<span class="text-rose-600">Aucune donnée chargée (manifest/CSV).</span>`; return;
+  }
 
-      if (mlSuspect || textCritical || hasHugeDiscount) {
-        return ["Suspect", "red", "suspect"];
-      }
+  // compute kw from hp if absent (comme preprocess)
+  if(q.hp!=null && !Number.isFinite(q.kw)) q.kw = q.hp*0.7355;
 
-      if (dp==null || !Number.isFinite(+dp)) return ["À considérer","gray","fair"];
-      const pct = +dp*100;
-      if (pct>=25) return ["Super affaire","green","super"];
-      if (pct>=10) return ["Bonne affaire","amber","good"];
-      if (pct<-5)  return ["Surévaluée","red","over"];
-      return ["Prix correct","gray","fair"];
-    }
+  const res=knnEstimate(q, 40);
+  if(!res){ out.innerHTML = `<span class="text-rose-600">Impossible d’estimer (données insuffisantes).</span>`; return; }
 
-    // ================== État global ==================
-    let SOURCES=[]; let RAW=[]; let DATA=[]; let VIEW=[]; let PAGE=1;
-    const sourceSelect=$("sourceSelect");
-    const sortSelect=$("sortSelect");
-    const orderSelect=$("orderSelect");
-    const idsBounds=["priceMin","priceMax","kmMin","kmMax","yearMin","yearMax"];
+  const {fair,lo,hi,conf,k_used}=res;
+  const pct=Math.round(conf*100);
+  out.innerHTML = `<div class="card bg-white p-4">
+    <div class="text-xs text-slate-600 mb-1">Prix estimé (pondéré ${k_used} voisins)</div>
+    <div class="text-2xl font-extrabold">${fmtEUR(fair)}</div>
+    <div class="text-sm mt-1">Intervalle attendu : <b>${fmtEUR(lo)}</b> – <b>${fmtEUR(hi)}</b>${(Number.isFinite(CALIB.c_lo)&&Number.isFinite(CALIB.c_hi))?` <span class="text-xs text-slate-500">(calibré)</span>`:``}</div>
+    <div class="text-xs text-slate-600 mt-1">Confiance approx. : ${pct}%</div>
+  </div>`;
+  // log estimation
+  try{
+    const u=getUser()||{};
+    const payload={type:"estimate", query:q, flags, result:{fair,lo,hi,conf,k_used}, email:u.email||"", name:u.name||"", sub:u.sub||"", page:location.href, userAgent:navigator.userAgent};
+    fetch(LOG_ENDPOINT,{method:"POST", body:JSON.stringify(payload), keepalive:true}).catch(()=>{});
+  }catch{}
+}
+$("btnEstimate")?.addEventListener("click",(e)=>{ e.preventDefault(); estimateHandler(); });
 
-    // ================== Wiring ==================
-    $("prevBtn").addEventListener("click", ()=>{ PAGE=Math.max(1,PAGE-1); render(); });
-    $("nextBtn").addEventListener("click", ()=>{ PAGE+=1; render(); });
-    $("resetBtn").addEventListener("click", resetFilters);
-    sortSelect.addEventListener("change", applyFilters);
-    orderSelect.addEventListener("change", applyFilters);
-    idsBounds.forEach(id => $(id).addEventListener("input", applyFilters));
-    sourceSelect.addEventListener("change", async ()=>{ await loadSelectedSource(); });
-    ["tSuper","tGood","tFair","tOver","tSuspect"].forEach(id=>{
-      const el=$(id); if (el) el.addEventListener("change", applyFilters);
-    });
-
-    // ================== Manifest/sources ==================
-    async function fetchJSON(url){
-      const r = await fetch(url, {cache:"no-store"});
-      if (!r.ok) throw new Error(`${url} non accessible (${r.status})`);
-      return r.json();
-    }
-    async function loadManifest(){
-      try {
-        const manifest = await fetchJSON(withBuster("./manifest.json"));
-        SOURCES = manifest.sources || [];
-        sourceSelect.innerHTML = SOURCES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join("");
-        if (!SOURCES.length){
-          $("resultInfo").textContent = "Aucune source trouvée. Génère manifest.json puis recharge.";
-          return;
-        }
-        sourceSelect.value = 0;
-        await loadSelectedSource();
-      } catch (err) {
-        $("resultInfo").textContent = "Impossible de charger manifest.json (même origine ?)";
-        console.error(err);
-      }
-    }
-
-    // ================== Lecture CSV ==================
-    function parseWithDelimiter(path, delimiter){
-      return new Promise((resolve,reject)=>{
-        Papa.parse(path, {
-          header: true, download: true, skipEmptyLines: true,
-          dynamicTyping: false, delimiter,
-          transformHeader: normalizeHeader,
-          complete: (res)=> resolve(res),
-          error: (err)=> reject(err)
-        });
-      });
-    }
-    async function loadCSV(path){
-      let out = await new Promise((resolve,reject)=>{
-        Papa.parse(path, {
-          header: true, download: true, skipEmptyLines: true, dynamicTyping: false,
-          transformHeader: normalizeHeader,
-          complete: (res)=> resolve(res),
-          error: (err)=> reject(err)
-        });
-      });
-      const cols = out.meta?.fields?.length || 0;
-      if (cols <= 1) {
-        out = await parseWithDelimiter(path, ";");
-        if ((out.meta?.fields?.length || 0) <= 1) {
-          out = await parseWithDelimiter(path, ",");
-        }
-      }
-      return out.data;
-    }
-
-    async function loadSelectedSource(){
-      const idx=+sourceSelect.value; const src=SOURCES[idx]; if(!src) return;
-      RAW = await loadCSV(withBuster(src.path));
-      DATA = enrich(RAW);
-      seedFilterBounds(DATA);
-      applyFilters();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    // ================== Enrichissement & filtres ==================
-    function enrich(rows){
-      return rows.map(r=>{
-        const row={...r};
-        const cols=["url","make","model","year","mileage_km","fuel","transmission","doors",
-          "power_kw","power_hp","co2_gkm","seller_rating","price_eur",
-          "pred_price_fair","pred_price_lo","pred_price_hi",
-          "deal_label","description","engine_liters","euro_norm",
-          "body_type","color","options",
-          "images","image_urls","photos","pictures","pics","thumbnails","media","gallery","srcset","src_set","src",
-          "cover_url","image","img","img_url","img_urls","first_image_url"
-        ];
-        cols.forEach(c=>{ if(!(c in row)) row[c]=null; });
-
-        const num=["year","mileage_km","power_kw","power_hp","co2_gkm","doors","seller_rating",
-          "engine_liters","price_eur","pred_price_fair","pred_price_lo","pred_price_hi"];
-        num.forEach(c=>{ row[c]=toNumberLoose(row[c]); });
-        // Colonnes ML/qualité si dispo (sinon valeurs par défaut)
-        row.is_unroadworthy_pred = toNumberLoose(row.is_unroadworthy_pred) ?? 0;
-        row.cond_bad_proba       = toNumberLoose(row.cond_bad_proba);
-        // compat: si le back a déjà mis 'suspicious' dans deal_label
-        row.deal_label = row.deal_label || "";
-
-        // Assure la présence (0/1) de TOUS les flags négatifs affichables
-        for (const f of Object.keys(NEGATIVE_FLAGS)) {
-          row[f] = toNumberLoose(row[f]) ?? 0;
-        }
-        // Et des positifs
-        for (const f of Object.keys(POSITIVE_FLAGS)) {
-          row[f] = toNumberLoose(row[f]) ?? 0;
-        }
-
-        for (const f of [...Object.keys(NEGATIVE_FLAGS), ...Object.keys(POSITIVE_FLAGS)]) {
-          row[f] = toNumberLoose(row[f]) ?? 0;
-        }
-
-        const fair=row.pred_price_fair, price=row.price_eur;
-        const disc=(fair && price!=null) ? (fair-price) : null;
-        row.discount_eur=disc;
-        row.discount_pct=(disc!=null && fair) ? (disc/fair) : null;
-
-        const [lbl, cls, code] = decideRow(row);
-        row.decision_label = lbl;
-        row.decision_class = cls;
-        row.decision_code  = code;  // <- pour le filtre
-
-
-        row.options_list=toList(row.options);
-        row._images=getImages(row);
-        row._img_count=row._images.length;
-        return row;
-      });
-    }
-
-    function robustMinMax(arr,col,defMin,defMax){
-      const vals=arr.map(r=>+r[col]).filter(Number.isFinite);
-      if(!vals.length) return [defMin,defMax];
-      return [Math.floor(Math.min(...vals)), Math.ceil(Math.max(...vals))];
-    }
-    function seedFilterBounds(data){
-      const [pmin,pmax]=robustMinMax(data,"price_eur",0,100000);
-      const [ymin,ymax]=robustMinMax(data,"year",1995,2030);
-      const [kmin,kmax]=robustMinMax(data,"mileage_km",0,400000);
-      $("priceMin").placeholder=pmin; $("priceMax").placeholder=pmax;
-      $("yearMin").placeholder=ymin; $("yearMax").placeholder=ymax;
-      $("kmMin").placeholder=kmin;   $("kmMax").placeholder=kmax;
-    }
-
-    function currentFilters(){
-      return {
-        priceMin:+$("priceMin").value || -Infinity,
-        priceMax:+$("priceMax").value || +Infinity,
-        kmMin:+$("kmMin").value || -Infinity,
-        kmMax:+$("kmMax").value || +Infinity,
-        yearMin:+$("yearMin").value || -Infinity,
-        yearMax:+$("yearMax").value || +Infinity,
-        sort:$("sortSelect").value,
-        asc:$("orderSelect").value==="asc",
-        types: selectedDealTypes(),              // <- AJOUT
-      };
-    }
-
-    function selectedDealTypes(){
-      return new Set([
-        $("tSuper")?.checked && "super",
-        $("tGood")?.checked && "good",
-        $("tFair")?.checked && "fair",
-        $("tOver")?.checked && "over",
-        $("tSuspect")?.checked && "suspect",
-      ].filter(Boolean));
-    }
-
-    function resetFilters(){
-      idsBounds.forEach(id => { $(id).value=""; });
-      sortSelect.value = "Remise (%)";
-      orderSelect.value = "desc";
-
-      // Types d’affaires par défaut :
-      if ($("tSuper"))   $("tSuper").checked = true;
-      if ($("tGood"))    $("tGood").checked = true;
-      if ($("tFair"))    $("tFair").checked = true;
-      if ($("tOver"))    $("tOver").checked = true;
-      if ($("tSuspect")) $("tSuspect").checked = false;  // <- exclu par défaut
-
-      applyFilters();
-    }
-
-
-    function applyFilters(){
-      const f=currentFilters();
-      let d=DATA.filter(r=>{
-        const p=+r.price_eur, y=+r.year, k=+r.mileage_km;
-        const okP=Number.isFinite(p)? (p>=f.priceMin && p<=f.priceMax) : true;
-        const okY=Number.isFinite(y)? (y>=f.yearMin && y<=f.yearMax) : true;
-        const okK=Number.isFinite(k)? (k>=f.kmMin   && k<=f.kmMax)   : true;
-        const okT=f.types.has(r.decision_code||"");                // <- AJOUT
-        return okP && okY && okK && okT;                           // <- AJOUT
-      });
-
-
-      let col="discount_pct";
-      if (f.sort==="Remise (€)") col="discount_eur";
-      else if (f.sort==="Prix (€)") col="price_eur";
-      else if (f.sort==="Année") col="year";
-      else if (f.sort==="Kilométrage") col="mileage_km";
-      else if (f.sort==="Prix juste (€)") col="pred_price_fair";
-
-      d.sort((a,b)=>{
-        const A=(a[col]??Number.NEGATIVE_INFINITY);
-        const B=(b[col]??Number.NEGATIVE_INFINITY);
-        if (!Number.isFinite(A) && !Number.isFinite(B)) return 0;
-        if (!Number.isFinite(A)) return 1;
-        if (!Number.isFinite(B)) return -1;
-        return f.asc ? (A-B) : (B-A);
-      });
-
-      VIEW=d;
-      PAGE=1;
-      render();
-    }
-
-    // ================== Rendu ==================
-    function badge(label,cls){ return `<span class="badge ${cls}"><span class="dot"></span>${label}</span>`; }
-
-    function tags(row, maxEach=3){
-      const negs=[], poss=[];
-      for (const [k,l] of Object.entries(NEGATIVE_FLAGS)) if (+row[k]===1) negs.push(l);
-      for (const [k,l] of Object.entries(POSITIVE_FLAGS)) if (+row[k]===1) poss.push(l);
-      return [
-        ...negs.slice(0,maxEach).map(t=>`<span class="inline-flex items-center pill bg-white">${t}</span>`),
-        ...poss.slice(0,maxEach).map(t=>`<span class="inline-flex items-center pill" style="background:#f0fdf4;border-color:#bbf7d0">${t}</span>`),
-      ].join("");
-    }
-
-    function kpiPairs(row){
-      const prix=money(row.price_eur);
-      const juste=money(row.pred_price_fair);
-      const pct=(row.discount_pct!=null && Number.isFinite(+row.discount_pct)) ? (row.discount_pct*100).toFixed(1)+"%" : "—";
-      return `
-        <div class="pairs">
-          <div class="kcell"><div class="text-xs text-slate-600 mb-1">Prix affiché</div><div class="text-xl font-extrabold">${prix}</div></div>
-          <div class="kcell"><div class="text-xs text-slate-600 mb-1">Prix juste</div><div class="text-xl font-extrabold">${juste}</div></div>
-          <div class="kcell"><div class="text-xs text-slate-600 mb-1">Remise vs juste</div><div class="text-xl font-extrabold">${pct}</div></div>
-        </div>
-      `;
-    }
-
-    function infoGrid(row){
-      const km   = safeInt(row.mileage_km);
-      const cyl  = Number.isFinite(+row.engine_liters) ? `${(+row.engine_liters).toFixed(1)} L` : "";
-      const carb = row.fuel ?? "";
-      const trans= row.transmission ?? "";
-      const euro = row.euro_norm ?? "";
-      const co2  = safeInt(row.co2_gkm);
-      const doors= safeInt(row.doors);
-      const body = (row.body_type ?? "") || (row.color ?? "");
-      const cells=[];
-      if (km)   cells.push(["Kilométrage", km]);
-      if (cyl)  cells.push(["Cylindrée", cyl]);
-      if (carb) cells.push(["Carburant", carb]);
-      if (trans)cells.push(["Transmission", trans]);
-      if (euro) cells.push(["Euronorm", euro]);
-      if (co2)  cells.push(["CO₂ (g/km)", co2]);
-      if (doors)cells.push(["Portes", doors]);
-      if (body) cells.push(["Carrosserie/Couleur", body]);
-      if (!cells.length) return "";
-      return `
-        <div class="grid-3x3">
-          ${cells.map(([l,v])=>`
-            <div class="kcell bg-white">
-              <div class="text-xs text-slate-600 mb-1">${l}</div>
-              <div class="font-extrabold">${v}</div>
-            </div>`).join("")}
-        </div>
-      `;
-    }
-
-    function galleryHTML(imgs = [], gid) {
-      const list = Array.from(new Set((imgs || []).filter(Boolean)));
-      if (list.length === 0) {
-        return `
-          <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 h-52
-                      flex items-center justify-center text-slate-400">
-            Aucune image
-          </div>`;
-      }
-      const cover = list[0];
-      return `
-        <div class="space-y-3">
-          <div class="relative w-full">
-            <div style="aspect-ratio:16/9" class="img-frame">
-              <img id="${gid}_cover" class="img-cover" loading="lazy" referrerpolicy="no-referrer"
-                   alt="photo de l'annonce" src="${cover}" onerror="window.__imgFallback(this)" />
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    window.swapCover = (gid, url, el) => {
-      const img = document.getElementById(gid+"_cover");
-      if (img) { img.src = url; img.closest('div')?.classList.remove('img-skeleton'); }
-      const parent = el?.parentElement;
-      if (parent){ [...parent.querySelectorAll(".thumb")].forEach(t => t.classList.remove("active")); }
-      el?.classList.add("active");
-    };
-
-    function card(row, idxAbs){
-      const title = [row.make?.toString().trim(), row.model?.toString().trim(), Number.isFinite(+row.year)? String(+row.year) : ""]
-        .filter(Boolean).join(" ") || "Annonce";
-      const dhtml = buildDescription(row.description || "", 'desc_' + idxAbs, 120);
-      const lo=row.pred_price_lo, hi=row.pred_price_hi, fair=row.pred_price_fair, price=row.price_eur;
-      let expl="";
-      if (Number.isFinite(+price) && Number.isFinite(+fair)){
-        expl = `Listé <strong>${money(price)}</strong> vs prix juste <strong>${money(fair)}</strong>.`;
-        if (Number.isFinite(+lo) && Number.isFinite(+hi)) expl += ` Intervalle attendu : [${money(lo)} – ${money(hi)}].`;
-        if (row.discount_pct!=null && Number.isFinite(+row.discount_pct)){
-          const d = +row.discount_pct*100;
-          expl += d>=0 ? ` ≈ <strong>${d.toFixed(1)}%</strong> sous le juste prix.` : ` ≈ <strong>${Math.abs(d).toFixed(1)}%</strong> au-dessus du juste prix.`;
-        }
-      }
-      const url = (row.url ?? "").toString();
-      const imgs = row._images || [];
-      const gid = "g_"+idxAbs;
-
-      const debugBlock = (IMG_DEBUG && imgs.length)
-        ? `<details class="mt-2 text-xs text-slate-600"><summary class="underline">Debug images (${imgs.length})</summary><div class="mt-1 break-all">${imgs.map(u=>`<div class="truncate">${u}</div>`).join("")}</div></details>`
-        : (IMG_DEBUG ? `<div class="mt-2 text-xs text-rose-600">Aucune image détectée pour cette ligne.</div>` : ``);
-
-      const srcLabel = (function(){ const el=document.getElementById('sourceSelect'); const i=el?el.selectedIndex:-1; return i>=0?(el.options[i].text||''):''; })();
-      const esc = s => String(s||'').replace(/'/g,"&#39;");
-
-      return `
-        <article class="card p-5">
-          <div class="flex items-start justify-between gap-2 mb-4">
-            <div>
-              <h3 class="text-xl font-extrabold tracking-tight">${title}</h3>
-              ${dhtml}
-            </div>
-            ${badge(row.decision_label, row.decision_class)}
-          </div>
-
-          ${imgs.length ? `${galleryHTML(imgs, gid)}` : `
-            <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 h-52 flex items-center justify-center text-slate-400">
-              Aucune image
-            </div>`}
-
-          <div class="mt-6 space-y-5">
-            ${kpiPairs(row)}
-            ${infoGrid(row)}
-            ${expl ? `<p class="text-sm">${expl}</p>` : ``}
-            ${tags(row) ? `<div class="mt-1 flex flex-wrap gap-2">${tags(row)}</div>` : ``}
-            ${
-              url && url.startsWith("http")
-              ? `<div class="pt-2">
-                   <button class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white font-extrabold hover:bg-slate-50"
-                           onclick="goToAd('${esc(url)}','${esc(title)}','${esc(srcLabel)}','${Number.isFinite(+row.price_eur)? String(row.price_eur) : ''}')">
-                     Voir l’annonce
-                   </button>
-                 </div>`
-              : ``
-            }
-            ${debugBlock}
-          </div>
-        </article>
-      `;
-    }
-
-    function render(){
-      const info = $("resultInfo");
-      info.textContent = `${VIEW.length} annonce(s) trouvée(s)`;
-      const total = VIEW.length;
-      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-      PAGE = Math.min(Math.max(1,PAGE), totalPages);
-      const start = (PAGE-1)*PAGE_SIZE;
-      const slice = VIEW.slice(start, start+PAGE_SIZE);
-
-      $("cards").innerHTML = slice.map((row,i)=>card(row, start+i)).join("");
-      $("prevBtn").disabled = PAGE<=1;
-      $("nextBtn").disabled = PAGE>=totalPages;
-      $("pageInfo").textContent = `Page ${PAGE} / ${totalPages}`;
-    }
-
-    // ================== Boot ==================
-    window.addEventListener("DOMContentLoaded", ()=>{
-      renderAccount();
-      loadManifest();
-    });
-  </script>
+/** ===========================
+ *  BOOT
+ *  =========================== */
+window.addEventListener("DOMContentLoaded", async ()=>{
+  renderAccount();
+  await Promise.all([loadManifest(), loadCalibration()]);
+  router();
+});
+</script>
 </body>
 </html>
