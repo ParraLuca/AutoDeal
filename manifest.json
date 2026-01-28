@@ -1,5 +1,5 @@
 {
-  "generated_at": "2025-10-13T12:03:20.655Z",
+  "generated_at": "2026-01-28T13:11:38.547Z",
   "sources": [
     {
       "label": "audi_a1",
@@ -28,6 +28,10 @@
     {
       "label": "polo",
       "path": "runs/polo/scored.csv"
+    },
+    {
+      "label": "volvo_s60",
+      "path": "runs/volvo_s60/scored.csv"
     },
     {
       "label": "volvo_v60",
