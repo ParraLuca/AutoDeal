@@ -648,6 +648,95 @@ def liters_from_value(val: str) -> Optional[float]:
         return round(cc/1000.0, 3) if cc else None
     return to_float(val)
 
+def extract_from_text_fallback(title: str, description: str) -> Dict[str, Any]:
+    """
+    Fallback: extract vehicle data from title + description when tab extraction fails.
+    This handles cases where the structured data isn't in tabs.
+    """
+    text = f"{title} {description}".lower()
+    result = {
+        "make": None, "model": None, "year": None, "mileage_km": None, 
+        "fuel": None, "transmission": None
+    }
+    
+    # Extract make and model from title (usually "Volvo S60" or "Volvo s60 D3")
+    title_clean = clean(title)
+    if title_clean:
+        # Common pattern: Make Model [variant]
+        parts = title_clean.split()
+        if len(parts) >= 2:
+            result["make"] = parts[0].title()  # "Volvo"
+            # Model is usually the second word, sometimes with additional chars
+            model_parts = []
+            for i in range(1, min(len(parts), 4)):  # Take up to 3 words for model
+                part = parts[i]
+                # Stop at common separators
+                if part.lower() in ['d2', 'd3', 'd4', 'd5', 't2', 't3', 't4', 't5', 't6', 't8', 'b3', 'b4', 'b5', '-', '|', '/', '•']:
+                    break
+                model_parts.append(part)
+            if model_parts:
+                result["model"] = " ".join(model_parts)
+    
+    # Extract year (look for 4-digit year between 1990-2030)
+    year_patterns = [
+        r'\b(19[9]\d|20[0-3]\d)\b',  # 1990-2039
+        r'(\d{2})/(\d{4})',  # MM/YYYY
+        r'(\d{4})/(\d{2})',  # YYYY/MM
+        r'bouwjaar\s*[:\s]*(\d{4})',  # "Bouwjaar: 2015"
+        r'année\s+de\s+fabrication\s*[:\s]*(\d{4})',  # "Année de fabrication: 2015"
+        r'bj\.?\s*(\d{4})',  # "bj.2013" or "bj 2013"
+    ]
+    for pattern in year_patterns:
+        m = re.search(pattern, text, re.I)
+        if m:
+            year_val = int(m.group(1))
+            if 1990 <= year_val <= 2030:
+                result["year"] = year_val
+                break
+    
+    # Extract mileage (look for numbers followed by km)
+    # Use word boundary to avoid matching "2013 260000 km" as one number
+    km_patterns = [
+        r'\b(\d{1,3}(?:[.\s]\d{3})*)\s*km\b',  # "260.000 km" or "260 000 km" (European format)
+        r'\b(\d{4,7})\s*km\b',  # "260000 km" (simple format, 4-7 digits)
+        r'kilometerstand\s*[:\s]*(\d[\d\s.,]*)\s*km',
+        r'kilométrage\s*[:\s]*(\d[\d\s.,]*)\s*km',
+    ]
+    for pattern in km_patterns:
+        m = re.search(pattern, text, re.I)
+        if m:
+            km_str = m.group(1).replace('.', '').replace(',', '').replace(' ', '')
+            km_val = to_int(km_str)
+            if km_val and 1000 <= km_val <= 1000000:  # Reasonable range
+                result["mileage_km"] = km_val
+                break
+    
+    # Extract fuel type
+    fuel_patterns = [
+        (r'\bdiesel\b', 'Diesel'),
+        (r'\bbenzine\b', 'Benzin'),
+        (r'\bessence\b', 'Essence'),
+        (r'\bhybrid|hybride\b', 'Hybrid'),
+        (r'\belectric|électrique|elektrisch\b', 'Electric'),
+        (r'\blpg|gpl\b', 'LPG'),
+    ]
+    for pattern, fuel_name in fuel_patterns:
+        if re.search(pattern, text, re.I):
+            result["fuel"] = fuel_name
+            break
+    
+    # Extract transmission
+    trans_patterns = [
+        (r'\bautomaat|automatique|automatic\b', 'Automatic'),
+        (r'\bmanu[eë]l|handgeschakeld\b', 'Manual'),
+    ]
+    for pattern, trans_name in trans_patterns:
+        if re.search(pattern, text, re.I):
+            result["transmission"] = trans_name
+            break
+    
+    return result
+
 def normalise_from_pairs(pairs: List[Dict[str,str]]) -> Tuple[Dict[str,Any], Dict[str,str]]:
     d: Dict[str,str] = {}
     for p in pairs:
@@ -712,16 +801,6 @@ def normalise_from_pairs(pairs: List[Dict[str,str]]) -> Tuple[Dict[str,Any], Dic
 
     return out, d
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
-
-def _safe_scrape(args):
-    """Appel isolé dans un process: ne touche PAS à ta logique."""
-    idx, url, headless, accept_cookies = args
-    try:
-        rec = scrape_one(url, headless=headless, accept_cookies=accept_cookies)
-        return (idx, rec, None)
-    except Exception as e:
-        return (idx, None, f"{e}")
 
 
 def scrape_one(url: str, headless: bool, accept_cookies: bool) -> Dict[str, Any]:
@@ -775,6 +854,17 @@ def scrape_one(url: str, headless: bool, accept_cookies: bool) -> Dict[str, Any]
         # Normalisation
         norm, specs_map = normalise_from_pairs(specs_pairs)
         options_values = dedup(options_values)
+
+        # FALLBACK: If tab extraction failed to get essential data, try extracting from text
+        if not norm["make"] or not norm["year"] or not norm["mileage_km"]:
+            fallback = extract_from_text_fallback(
+                meta.get("title") or "", 
+                meta.get("description") or ""
+            )
+            # Only overwrite None values with fallback data
+            for key in ["make", "model", "year", "mileage_km", "fuel", "transmission"]:
+                if not norm.get(key) and fallback.get(key):
+                    norm[key] = fallback[key]
 
         # Record final
         rec.update({
@@ -1100,7 +1190,28 @@ def train_condition_classifier(df: pd.DataFrame, outdir: str, target_precision: 
         base["desc_text"] = base.get("description", pd.Series([""]*len(base))).astype(str).fillna("").str.slice(0, 2000)
         base["text_all"] = (base["options_text"] + " " + base["desc_text"]).str.strip()
 
-    base["label_unroadworthy"] = base.apply(weak_label_unroadworthy_row, axis=1).astype(int)
+    print(f"DEBUG: base.shape={base.shape}")
+    print(f"DEBUG: base columns={base.columns.tolist()}")
+    
+    # Handle empty DataFrame case
+    if len(base) == 0:
+        res_apply = pd.Series([], dtype=int)
+    else:
+        res_apply = base.apply(weak_label_unroadworthy_row, axis=1)
+        # In edge cases, apply() on empty or certain DataFrames returns a DataFrame instead of Series
+        # Convert to Series if needed
+        if isinstance(res_apply, pd.DataFrame):
+            if res_apply.shape[1] > 0:
+                res_apply = res_apply.iloc[:, 0]  # Take first column
+            else:
+                res_apply = pd.Series([], dtype=int)
+    
+    print(f"DEBUG: apply result type={type(res_apply)}")
+    if isinstance(res_apply, pd.DataFrame):
+         print(f"DEBUG: apply result shape={res_apply.shape}") 
+    print(f"DEBUG: apply result head={res_apply.head()}")
+
+    base["label_unroadworthy"] = res_apply.astype(int)
 
     # Vectoriseur + classif
     vec = TfidfVectorizer(max_features=20000, ngram_range=(1,2), min_df=3)
@@ -1173,6 +1284,8 @@ def preprocess(df: pd.DataFrame, for_training=True) -> pd.DataFrame:
     df["desc_text"] = df["desc_text"].str.slice(0, 2000)
     # 1) Flags qualité issus de la description
     flags_df = df["desc_text"].apply(extract_desc_flags).apply(pd.Series)
+    if isinstance(flags_df, pd.Series):
+        flags_df = pd.DataFrame(index=flags_df.index)
 
     # Assure présence de toutes les colonnes même si aucune occurrence
     for col in [
@@ -1641,27 +1754,27 @@ def cmd_scrape(args):
     jsonl_path.parent.mkdir(parents=True, exist_ok=True)
 
     # exécution
-    tasks = [(i, u, args.headless, (not args.reject)) for i, u in enumerate(urls)]
-    results_ordered: List[Optional[Dict[str, Any]]] = [None] * len(tasks)
-
-    workers = getattr(args, "workers", 2)
-    print(f"[run] scraping parallèle avec {workers} worker(s)")
-
+    # exécution
+    print(f"[run] scraping SÉQUENTIEL (plus sûr) - {len(urls)} URLs à traiter")
     nb_ok, nb_err = 0, 0
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(_safe_scrape, t): t for t in tasks}
-        for fut in as_completed(futs):
-            idx, rec, err = fut.result()
-            url = urls[idx]
-            if err is None and isinstance(rec, dict):
-                results_ordered[idx] = rec
-                nb_ok += 1
-                print(f"[✓] OK: {url}")
-            else:
-                nb_err += 1
-                print(f"[×] ERREUR {url}: {err}")
+    records = []
 
-    records = [r for r in results_ordered if r is not None]
+    for i, url in enumerate(urls):
+        print(f"[{i+1}/{len(urls)}] Scraping: {url}")
+        try:
+            # Appel direct sans process pool
+            rec = scrape_one(url, headless=args.headless, accept_cookies=(not args.reject))
+            records.append(rec)
+            nb_ok += 1
+            print(f"[✓] OK")
+        except Exception as e:
+            nb_err += 1
+            print(f"[×] ERREUR: {e}")
+            # On continue quand même
+
+        # Petit sleep de politesse si besoin, bien que scrape_one prenne du temps
+        time.sleep(1.0)
+
     if not records:
         print("Aucun enregistrement", file=sys.stderr)
         sys.exit(2)
@@ -1767,8 +1880,5 @@ def main():
     args.func(args)
 
 
-from multiprocessing import freeze_support
-
 if __name__ == "__main__":
-    freeze_support()
     main()
