@@ -1218,16 +1218,28 @@ def train_condition_classifier(df: pd.DataFrame, outdir: str, target_precision: 
     X = vec.fit_transform(base["text_all"].astype(str).fillna(""))
     y = base["label_unroadworthy"].values
 
-    clf = LogisticRegression(max_iter=1000, class_weight="balanced")
-    clf.fit(X, y)
+    # Check if we have only one class (all 0s or all 1s)
+    n_classes = len(np.unique(y))
+    
+    if n_classes < 2:
+        # Single class - create a dummy classifier
+        print(f"WARNING: Only one class found (class={np.unique(y)[0]}). Creating dummy classifier.")
+        from sklearn.dummy import DummyClassifier
+        clf = DummyClassifier(strategy="most_frequent")
+        clf.fit(X, y)
+        chosen = 0.5  # Default threshold
+    else:
+        # Normal case - train logistic regression
+        clf = LogisticRegression(max_iter=1000, class_weight="balanced")
+        clf.fit(X, y)
 
-    # Seuil haute précision
-    probs = clf.predict_proba(X)[:, 1]
-    precision, recall, thresholds = precision_recall_curve(y, probs)
-    chosen = 0.5
-    for p, t in zip(precision, np.r_[thresholds, 1.0]):
-        if p >= target_precision:
-            chosen = float(t); break
+        # Seuil haute précision
+        probs = clf.predict_proba(X)[:, 1]
+        precision, recall, thresholds = precision_recall_curve(y, probs)
+        chosen = 0.5
+        for p, t in zip(precision, np.r_[thresholds, 1.0]):
+            if p >= target_precision:
+                chosen = float(t); break
 
     joblib.dump((vec, clf), Path(outdir) / "condition_clf.joblib", compress=3)
     with open(Path(outdir) / "condition_meta.json", "w", encoding="utf-8") as f:
@@ -1396,7 +1408,16 @@ def train_models(df: pd.DataFrame, outdir: str, n_folds: int = FOLD_K) -> Dict[s
     # ===== 2) Préparer les données (comme avant), puis filtrer =====
     base_all = preprocess(df, for_training=True).reset_index(drop=True)
     Xtxt = base_all["text_all"].astype(str).fillna("")
-    probs = clf.predict_proba(vec.transform(Xtxt))[:, 1]
+    probs_all = clf.predict_proba(vec.transform(Xtxt))
+    
+    # Handle single-class classifier (DummyClassifier case)
+    if probs_all.shape[1] == 1:
+        # Only one class exists (all 0s) - probability of class 1 is always 0
+        probs = np.zeros(len(probs_all))
+    else:
+        # Normal case - get probability of class 1
+        probs = probs_all[:, 1]
+    
     base_all["cond_bad_proba"] = probs
     base_all["is_unroadworthy_pred"] = (probs >= cond_thresh).astype(int)
 
@@ -1643,7 +1664,16 @@ def score_file(df: pd.DataFrame, artifacts_dir: str) -> pd.DataFrame:
         vec, clf = joblib.load(cond_clf_path)
 
         Xtxt = X["text_all"].astype(str).fillna("")
-        probs = clf.predict_proba(vec.transform(Xtxt))[:, 1]
+        proba_matrix = clf.predict_proba(vec.transform(Xtxt))
+        
+        # Handle single-class classifier (all vehicles are roadworthy or all unroadworthy)
+        if proba_matrix.shape[1] == 1:
+            # Only one class exists - assume all are roadworthy (class 0)
+            probs = np.zeros(len(Xtxt))
+        else:
+            # Normal case: get probability of unroadworthy class (index 1)
+            probs = proba_matrix[:, 1]
+        
         out["cond_bad_proba"] = probs
         out["is_unroadworthy_pred"] = (probs >= thr).astype(int)
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-28T13:11:38.547Z",
+  "generated_at": "2026-01-29T09:21:00.446Z",
   "sources": [
     {
       "label": "audi_a1",
@@ -28,6 +28,14 @@
     {
       "label": "polo",
       "path": "runs/polo/scored.csv"
+    },
+    {
+      "label": "toyota_corolla_hybrid",
+      "path": "runs/toyota_corolla_hybrid/scored.csv"
+    },
+    {
+      "label": "toyota_yaris_hybrid",
+      "path": "runs/toyota_yaris_hybrid/scored.csv"
     },
     {
       "label": "volvo_s60",
